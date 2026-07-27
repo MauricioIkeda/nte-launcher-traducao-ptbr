@@ -25,7 +25,7 @@ class TrustedHttpClientFactory {
     final client = HttpClient(context: context);
     client.connectionTimeout = const Duration(seconds: 15);
     client.idleTimeout = const Duration(seconds: 30);
-    client.userAgent = 'NTE-Translation-Launcher/2.0';
+    client.userAgent = 'NTE-Launcher-Traducao-PTBR/1.0';
     return client;
   }
 }

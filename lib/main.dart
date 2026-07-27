@@ -47,7 +47,7 @@ class NteLauncherApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'NTE Tradução PT-BR',
+      title: 'NTE Launcher Tradução PT-BR',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

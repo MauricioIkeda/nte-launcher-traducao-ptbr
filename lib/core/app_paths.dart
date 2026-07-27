@@ -6,13 +6,16 @@ import 'package:path_provider/path_provider.dart';
 class AppPaths {
   AppPaths._(this.root);
 
+  static const _legacyStorageName = 'NTE Translation Launcher';
+
   final Directory root;
 
   factory AppPaths.forTesting(Directory root) => AppPaths._(root);
 
   static Future<AppPaths> create() async {
     final support = await getApplicationSupportDirectory();
-    final root = Directory(p.join(support.path, 'NTE Translation Launcher'));
+    // Mantido para preservar backups e recibos criados pela versão 1.0.0.
+    final root = Directory(p.join(support.path, _legacyStorageName));
     await root.create(recursive: true);
     return AppPaths._(root);
   }
@@ -24,7 +27,7 @@ class AppPaths {
   Directory get updates => Directory(p.join(root.path, 'updates'));
   File get cachedManifest => File(p.join(cache.path, 'manifest.json'));
   File get updateInstaller =>
-      File(p.join(updates.path, 'NTE-Translation-Launcher-Setup.exe'));
+      File(p.join(updates.path, 'NTE-Launcher-Traducao-PTBR-Setup.exe'));
   File get installReceipt => File(p.join(root.path, 'install_receipt.json'));
   File get logFile => File(p.join(root.path, 'launcher.log'));
 }

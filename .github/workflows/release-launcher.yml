@@ -87,7 +87,7 @@ jobs:
         run: |
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             "/DMyAppVersion=${{ steps.version.outputs.version }}" `
-            "installer\NTE-Translation-Launcher.iss"
+            "installer\NTE-Launcher-Traducao-PTBR.iss"
 
       - name: Generate launcher manifest
         shell: pwsh
@@ -103,7 +103,7 @@ jobs:
           }
           python tool\generate_launcher_manifest.py `
             --version "${{ steps.version.outputs.version }}" `
-            --installer "build\installer\NTE-Translation-Launcher-Setup.exe" `
+            --installer "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe" `
             --repository "${{ github.repository }}" `
             --output "assets\manifest\launcher_manifest.json" `
             --published-at $publishedAt `
@@ -118,10 +118,10 @@ jobs:
         run: |
           $tag = "v${{ steps.version.outputs.version }}"
           gh release create $tag `
-            "build\installer\NTE-Translation-Launcher-Setup.exe" `
+            "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe" `
             --repo "${{ github.repository }}" `
             --target "${{ github.sha }}" `
-            --title "NTE Translation Launcher $tag" `
+            --title "NTE Launcher Tradução PT-BR $tag" `
             --notes $env:RELEASE_NOTES
 
       - name: Update static launcher manifest on main
