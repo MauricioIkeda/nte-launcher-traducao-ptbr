@@ -5,7 +5,7 @@
 #define MyAppName "NTE Translation Launcher"
 #define MyAppExeName "NTE-Traducao-PTBR.exe"
 #define MyAppPublisher "Comunidade NTE PT-BR"
-#define MyAppURL "https://github.com/MauricioIkeda/ntelauncher-traducao-2.0"
+#define MyAppURL "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr"
 
 [Setup]
 AppId={{81100993-B692-4FCC-BA9D-0A1DC3A9C33E}

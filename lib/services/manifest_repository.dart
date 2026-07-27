@@ -16,7 +16,7 @@ class ManifestRepository {
     'NTE_MANIFEST_URL',
     defaultValue:
         'https://raw.githubusercontent.com/MauricioIkeda/'
-        'ntelauncher-traducao-2.0/main/assets/manifest/'
+        'nte-launcher-traducao-ptbr/main/assets/manifest/'
         'translation_manifest.json',
   );
 

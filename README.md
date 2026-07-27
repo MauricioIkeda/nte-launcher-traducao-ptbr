@@ -1,7 +1,7 @@
 # NTE Translation Launcher
 
 [![Flutter](https://img.shields.io/badge/Flutter-Windows-02569B?logo=flutter)](https://flutter.dev/)
-[![Atualizar manifesto](https://github.com/MauricioIkeda/ntelauncher-traducao-2.0/actions/workflows/update-translation-manifest.yml/badge.svg)](https://github.com/MauricioIkeda/ntelauncher-traducao-2.0/actions/workflows/update-translation-manifest.yml)
+[![Atualizar manifesto](https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/actions/workflows/update-translation-manifest.yml/badge.svg)](https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/actions/workflows/update-translation-manifest.yml)
 [![Manifesto](https://img.shields.io/badge/downloads-SHA--256-22c55e)](#segurança)
 
 Launcher comunitário para instalar, atualizar e remover a tradução PT-BR de
@@ -122,7 +122,7 @@ build/windows/x64/runner/Release/
 Por padrão, o aplicativo consulta:
 
 ```text
-https://raw.githubusercontent.com/MauricioIkeda/ntelauncher-traducao-2.0/main/assets/manifest/translation_manifest.json
+https://raw.githubusercontent.com/MauricioIkeda/nte-launcher-traducao-ptbr/main/assets/manifest/translation_manifest.json
 ```
 
 Para usar outro repositório ou endereço:

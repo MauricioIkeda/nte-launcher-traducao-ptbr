@@ -59,7 +59,7 @@ def main() -> int:
     parser.add_argument("--installer", required=True, type=Path)
     parser.add_argument(
         "--repository",
-        default="MauricioIkeda/ntelauncher-traducao-2.0",
+        default="MauricioIkeda/nte-launcher-traducao-ptbr",
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument(
