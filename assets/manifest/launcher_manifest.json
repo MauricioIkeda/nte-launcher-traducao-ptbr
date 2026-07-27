@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "publishedAt": "2026-07-27T08:45:17Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/ntelauncher-traducao-2.0/releases/download/v1.0.0/NTE-Translation-Launcher-Setup.exe",
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.0/NTE-Translation-Launcher-Setup.exe",
     "size": 13886786,
     "sha256": "b301a4da73707ed68935909375cc0ec3a2403af524a2073304f1e85bf65dc248"
   },
