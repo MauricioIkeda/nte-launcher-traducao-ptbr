@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'core/app_paths.dart';
 import 'core/launcher_log.dart';
@@ -14,10 +15,12 @@ import 'services/installation_service.dart';
 import 'services/manifest_repository.dart';
 import 'services/settings_service.dart';
 
-const _cyan = Color(0xFF3EE8FF);
-const _coral = Color(0xFFFF657F);
-const _ink = Color(0xFF07101C);
-const _muted = Color(0xFF9AA9BC);
+const _cyan = Color(0xFF35D8F1);
+const _coral = Color(0xFFFF4F86);
+const _yellow = Color(0xFFFFD84D);
+const _green = Color(0xFF69E09D);
+const _ink = Color(0xFF07182B);
+const _muted = Color(0xFFA9B9C9);
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,28 +105,52 @@ class _LauncherPageState extends State<LauncherPage> {
               SafeArea(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 960;
+                    final compact = constraints.maxWidth < 980;
                     return Padding(
                       padding: EdgeInsets.fromLTRB(
-                        compact ? 24 : 42,
-                        24,
-                        compact ? 24 : 42,
-                        22,
+                        compact ? 22 : 32,
+                        18,
+                        compact ? 22 : 32,
+                        16,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _TopBar(controller: widget.controller),
-                          const Spacer(),
-                          _HeroCopy(compact: compact),
-                          SizedBox(height: compact ? 18 : 24),
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: compact ? 640 : 700,
-                            ),
-                            child: _UpdatePanel(controller: widget.controller),
+                          const SizedBox(height: 18),
+                          Expanded(
+                            child: compact
+                                ? Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 680,
+                                      ),
+                                      child: _UpdatePanel(
+                                        controller: widget.controller,
+                                      ),
+                                    ),
+                                  )
+                                : Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      const Expanded(
+                                        child: Align(
+                                          alignment: Alignment.bottomLeft,
+                                          child: _HeroCopy(compact: false),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 34),
+                                      SizedBox(
+                                        width: 510,
+                                        child: _UpdatePanel(
+                                          controller: widget.controller,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
                           _Footer(controller: widget.controller),
                         ],
                       ),
@@ -158,12 +185,12 @@ class _HeroBackground extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              stops: [0, .38, .72, 1],
+              stops: [0, .28, .58, 1],
               colors: [
-                Color(0xD907101C),
-                Color(0x9907101C),
-                Color(0x1A07101C),
-                Color(0x2607101C),
+                Color(0x5C07182B),
+                Color(0x1A07182B),
+                Color(0x2607182B),
+                Color(0xB807182B),
               ],
             ),
           ),
@@ -175,9 +202,9 @@ class _HeroBackground extends StatelessWidget {
               end: Alignment.bottomCenter,
               stops: [0, .52, 1],
               colors: [
-                Color(0x4D020915),
+                Color(0x7307182B),
                 Colors.transparent,
-                Color(0xD9020915),
+                Color(0xD907182B),
               ],
             ),
           ),
@@ -197,41 +224,27 @@ class _TopBar extends StatelessWidget {
     return Row(
       children: [
         const _BrandMark(),
-        const SizedBox(width: 14),
+        const SizedBox(width: 12),
         const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(
-                  'NTE',
-                  style: TextStyle(
-                    fontSize: 25,
-                    height: .9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                  ),
-                ),
-                SizedBox(width: 9),
-                Text(
-                  'PT-BR',
-                  style: TextStyle(
-                    color: _cyan,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 5),
             Text(
-              'LAUNCHER COMUNITÁRIO  //  EIBON NETWORK',
+              'NTE LAUNCHER',
               style: TextStyle(
-                color: Color(0xFFB7C4D4),
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.6,
+                fontSize: 20,
+                height: .95,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2.2,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'TRADUÇÃO PT-BR  •  PROJETO COMUNITÁRIO',
+              style: TextStyle(
+                color: _yellow,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.25,
               ),
             ),
           ],
@@ -239,9 +252,9 @@ class _TopBar extends StatelessWidget {
         const Spacer(),
         _LiveStatus(controller: controller),
         const SizedBox(width: 10),
-        _SquareAction(
-          tooltip: 'Configurações e atualizações',
-          icon: Icons.settings_outlined,
+        _TopAction(
+          label: 'CONFIGURAÇÕES',
+          icon: Icons.tune_rounded,
           onPressed: controller.isBusy
               ? null
               : () => showDialog<void>(
@@ -259,43 +272,22 @@ class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Transform.rotate(
-            angle: -.28,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: _cyan.withValues(alpha: .72)),
-              ),
-            ),
-          ),
-          Transform.rotate(
-            angle: .42,
-            child: Container(
-              width: 33,
-              height: 46,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _coral.withValues(alpha: .75)),
-              ),
-            ),
-          ),
-          const Text(
-            'N',
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
+    return Container(
+      width: 54,
+      height: 54,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _yellow,
+        border: Border.all(color: Colors.white.withValues(alpha: .78)),
+        boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 14)],
+      ),
+      child: ClipOval(
+        child: Image.asset(
+          'assets/images/app_icon.png',
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
+        ),
       ),
     );
   }
@@ -322,12 +314,10 @@ class _LiveStatus extends StatelessWidget {
             height: 7,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: online ? const Color(0xFF73F0B3) : _coral,
+              color: online ? _green : _coral,
               boxShadow: [
                 BoxShadow(
-                  color: (online ? const Color(0xFF73F0B3) : _coral).withValues(
-                    alpha: .55,
-                  ),
+                  color: (online ? _green : _coral).withValues(alpha: .55),
                   blurRadius: 8,
                 ),
               ],
@@ -335,7 +325,7 @@ class _LiveStatus extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            online ? 'MANIFESTO VERIFICADO' : 'VERIFICANDO REDE',
+            online ? 'SERVIÇO ONLINE' : 'CONECTANDO',
             style: const TextStyle(
               color: Color(0xFFD8E3EF),
               fontSize: 9,
@@ -357,16 +347,17 @@ class _HeroCopy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Container(width: 28, height: 2, color: _coral),
+            Container(width: 32, height: 3, color: _yellow),
             const SizedBox(width: 10),
             const Text(
-              'ANOMALIA LOCALIZADA  //  HETHEREAU',
+              'TRADUÇÃO COMUNITÁRIA  //  PT-BR',
               style: TextStyle(
-                color: Color(0xFFE5B8C3),
+                color: Color(0xFFFFEBA1),
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 2,
@@ -376,9 +367,9 @@ class _HeroCopy extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'A CIDADE AGORA\nFALA PORTUGUÊS.',
+          'NTE EM\nPORTUGUÊS.',
           style: TextStyle(
-            fontSize: compact ? 34 : 43,
+            fontSize: compact ? 32 : 40,
             height: .96,
             fontWeight: FontWeight.w900,
             letterSpacing: -.8,
@@ -393,10 +384,11 @@ class _HeroCopy extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         const Text(
-          'Tradução comunitária com instalação segura, verificável e reversível.',
+          'Instale, mantenha atualizado e jogue em poucos cliques.',
           style: TextStyle(
-            color: Color(0xFFD0DAE6),
+            color: Color(0xFFF0F5F8),
             fontSize: 13,
+            height: 1.45,
             letterSpacing: .15,
           ),
         ),
@@ -421,8 +413,8 @@ class _UpdatePanel extends StatelessWidget {
     final actionLabel = !controller.isInstalled
         ? 'INSTALAR TRADUÇÃO'
         : translationIsCurrent
-        ? 'JOGAR PELA ${controller.gamePlatform?.label.toUpperCase() ?? 'PLATAFORMA DETECTADA'}'
-        : 'ATUALIZAR PARA v${availableVersion ?? '...'}';
+        ? 'JOGAR AGORA  •  ${controller.gamePlatform?.label.toUpperCase() ?? 'NTE'}'
+        : 'ATUALIZAR TRADUÇÃO  •  v${availableVersion ?? '...'}';
     final actionIcon = translationIsCurrent
         ? Icons.play_arrow_rounded
         : Icons.download_done_rounded;
@@ -433,56 +425,82 @@ class _UpdatePanel extends StatelessWidget {
         ? controller.launchGame
         : controller.installOrUpdate;
     return _GlassSurface(
-      radius: 18,
-      padding: const EdgeInsets.fromLTRB(20, 17, 17, 17),
+      radius: 22,
+      padding: const EdgeInsets.fromLTRB(20, 19, 20, 18),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'PACOTE DE IDIOMA',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.7,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'CENTRAL DO LAUNCHER',
+                      style: TextStyle(
+                        color: _yellow,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      'Tradução PT-BR',
+                      style: TextStyle(
+                        fontSize: 22,
+                        height: 1,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      controller.isInstalled
+                          ? 'Instalada no seu jogo e pronta para usar'
+                          : 'Localize o jogo e instale o pacote de idioma',
+                      style: const TextStyle(color: _muted, fontSize: 10),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              _VersionTag(
-                label: manifest == null
-                    ? 'SINCRONIZANDO'
-                    : 'v${manifest.translationVersion}',
-              ),
-              const Spacer(),
-              const Icon(Icons.shield_outlined, color: _cyan, size: 16),
-              const SizedBox(width: 6),
-              const Text(
-                'SHA-256',
-                style: TextStyle(
-                  color: _muted,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _VersionTag(
+                    label: manifest == null
+                        ? 'SINCRONIZANDO'
+                        : 'PACOTE v${manifest.translationVersion}',
+                  ),
+                  const SizedBox(height: 7),
+                  _InstallStateTag(
+                    installed: controller.isInstalled,
+                    current: translationIsCurrent,
+                  ),
+                ],
               ),
             ],
           ),
           if (controller.availableAppUpdate != null ||
               controller.updatingLauncher) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             _LauncherUpdateBanner(controller: controller),
           ],
-          const SizedBox(height: 13),
+          const SizedBox(height: 14),
           _FolderField(controller: controller),
-          const SizedBox(height: 13),
+          const SizedBox(height: 12),
           _ProgressArea(controller: controller),
           if (controller.errorMessage != null) ...[
             const SizedBox(height: 10),
             _ErrorMessage(message: controller.errorMessage!),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          const _RiskNotice(),
+          const SizedBox(height: 12),
           Row(
             children: [
               if (controller.status == LauncherStatus.downloading)
@@ -496,7 +514,7 @@ class _UpdatePanel extends StatelessWidget {
               else ...[
                 if (controller.isInstalled) ...[
                   SizedBox(
-                    width: 190,
+                    width: 170,
                     child: _SecondaryButton(
                       label: 'REMOVER TRADUÇÃO',
                       icon: Icons.delete_outline_rounded,
@@ -517,6 +535,215 @@ class _UpdatePanel extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InstallStateTag extends StatelessWidget {
+  const _InstallStateTag({required this.installed, required this.current});
+
+  final bool installed;
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, icon) = !installed
+        ? ('NÃO INSTALADA', _yellow, Icons.download_outlined)
+        : current
+        ? ('ATUALIZADA', _green, Icons.check_circle_outline_rounded)
+        : ('ATUALIZAÇÃO DISPONÍVEL', _yellow, Icons.update_rounded);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 12),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 7,
+            fontWeight: FontWeight.w900,
+            letterSpacing: .7,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RiskNotice extends StatelessWidget {
+  const _RiskNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (_) => const _RiskDialog(),
+        ),
+        borderRadius: BorderRadius.circular(11),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(11, 9, 8, 9),
+          decoration: BoxDecoration(
+            color: _yellow.withValues(alpha: .1),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: _yellow.withValues(alpha: .42)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: _yellow, size: 19),
+              SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TRADUÇÃO NÃO OFICIAL  •  EXISTE RISCO À CONTA',
+                      style: TextStyle(
+                        color: Color(0xFFFFE99A),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: .55,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'O uso pode resultar em punição. Leia antes de instalar.',
+                      style: TextStyle(color: Color(0xFFD8E1E9), fontSize: 8),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFFFFE99A),
+                size: 19,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RiskDialog extends StatelessWidget {
+  const _RiskDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: _GlassSurface(
+          radius: 20,
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.gpp_maybe_outlined, color: _yellow, size: 26),
+                  SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ANTES DE CONTINUAR',
+                          style: TextStyle(
+                            color: _yellow,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.3,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Entenda os riscos da tradução',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const _RiskBullet(
+                text:
+                    'Este launcher e a tradução são projetos comunitários, '
+                    'sem vínculo com os responsáveis pelo jogo.',
+              ),
+              const _RiskBullet(
+                text:
+                    'Qualquer modificação pode contrariar os termos do jogo '
+                    'e resultar em advertência, suspensão ou banimento.',
+              ),
+              const _RiskBullet(
+                text:
+                    'Atualizações do jogo podem tornar a tradução '
+                    'temporariamente incompatível.',
+              ),
+              const _RiskBullet(
+                text:
+                    'O launcher confere os arquivos e preserva os originais, '
+                    'mas isso não elimina o risco para a conta.',
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('ENTENDI E QUERO CONTINUAR'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _yellow,
+                  foregroundColor: _ink,
+                  minimumSize: const Size.fromHeight(46),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RiskBullet extends StatelessWidget {
+  const _RiskBullet({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 3),
+            child: Icon(Icons.circle, color: _coral, size: 7),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Color(0xFFDDE6EE),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
           ),
         ],
       ),
@@ -715,8 +942,7 @@ class _SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Os instaladores são baixados por HTTPS e só executados '
-                    'após a validação de tamanho e SHA-256.',
+                    'Toda atualização é conferida antes de ser instalada.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: _muted, fontSize: 9),
                   ),
@@ -758,7 +984,7 @@ class _FolderField extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'DIRETÓRIO DO JOGO',
+                      'LOCALIZAÇÃO DO JOGO  •  CLIQUE PARA ALTERAR',
                       style: TextStyle(
                         color: _muted,
                         fontSize: 8,
@@ -786,11 +1012,8 @@ class _FolderField extends StatelessWidget {
                 const SizedBox(width: 8),
                 _PlatformTag(info: controller.gamePlatform!),
               ],
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFF8190A2),
-                size: 19,
-              ),
+              const SizedBox(width: 7),
+              const Icon(Icons.chevron_right_rounded, color: _yellow, size: 19),
             ],
           ),
         ),
@@ -844,6 +1067,16 @@ class _ProgressArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final progressLabel = switch (controller.status) {
+      LauncherStatus.starting => 'CONECTANDO',
+      LauncherStatus.downloading ||
+      LauncherStatus.installing ||
+      LauncherStatus.removing =>
+        '${(controller.progress * 100).toStringAsFixed(0)}%',
+      LauncherStatus.completed => 'CONCLUÍDO',
+      LauncherStatus.error => 'ATENÇÃO',
+      LauncherStatus.ready => 'PRONTO',
+    };
     return Column(
       children: [
         Row(
@@ -867,9 +1100,9 @@ class _ProgressArea extends StatelessWidget {
               ),
             ),
             Text(
-              '${(controller.progress * 100).toStringAsFixed(0)}%',
-              style: const TextStyle(
-                color: _cyan,
+              progressLabel,
+              style: TextStyle(
+                color: _statusColor(controller.status),
                 fontSize: 10,
                 fontWeight: FontWeight.w900,
                 fontFeatures: [FontFeature.tabularFigures()],
@@ -945,13 +1178,13 @@ class _PrimaryActionButton extends StatelessWidget {
       onPressed: enabled ? onPressed : null,
       style: FilledButton.styleFrom(
         elevation: 8,
-        shadowColor: _cyan.withValues(alpha: .32),
-        backgroundColor: _cyan,
+        shadowColor: _yellow.withValues(alpha: .3),
+        backgroundColor: _yellow,
         foregroundColor: const Color(0xFF03131A),
         disabledBackgroundColor: const Color(0xFF344652),
         disabledForegroundColor: const Color(0xFF82919D),
-        minimumSize: const Size.fromHeight(47),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+        minimumSize: const Size.fromHeight(50),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -959,9 +1192,9 @@ class _PrimaryActionButton extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
+              letterSpacing: 1,
             ),
           ),
           const SizedBox(width: 10),
@@ -999,8 +1232,8 @@ class _SecondaryButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: const Color(0xFFFFC1CB),
         side: const BorderSide(color: Color(0x88FF657F)),
-        minimumSize: const Size.fromHeight(47),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+        minimumSize: const Size.fromHeight(50),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -1023,38 +1256,255 @@ class _Footer extends StatelessWidget {
         const SizedBox(width: 7),
         const Expanded(
           child: Text(
-            'MOD NÃO OFICIAL  •  USE POR SUA CONTA E RISCO',
+            'NTE LAUNCHER TRADUÇÃO PT-BR  •  COMUNITÁRIO E NÃO OFICIAL',
             style: TextStyle(
-              color: Color(0xFF98A8BA),
+              color: Color(0xFFD8E2EA),
               fontSize: 8,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.1,
             ),
           ),
         ),
-        Tooltip(
-          message: controller.paths.logFile.path,
-          child: const Row(
+        TextButton.icon(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => const _CreditsDialog(),
+          ),
+          icon: const Icon(Icons.favorite_outline_rounded, size: 13),
+          label: const Text('CRÉDITOS'),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFFFFE58A),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: const TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w900,
+              letterSpacing: .9,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          'LAUNCHER v${controller.appVersion}',
+          style: const TextStyle(
+            color: Color(0xFFB7C6D3),
+            fontSize: 8,
+            fontWeight: FontWeight.w800,
+            letterSpacing: .8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CreditsDialog extends StatelessWidget {
+  const _CreditsDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 470),
+        child: _GlassSurface(
+          radius: 20,
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                Icons.description_outlined,
-                color: Color(0xFF98A8BA),
-                size: 13,
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: _yellow.withValues(alpha: .14),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _yellow.withValues(alpha: .42)),
+                    ),
+                    child: const Icon(
+                      Icons.favorite_rounded,
+                      color: _yellow,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'FEITO PELA COMUNIDADE',
+                          style: TextStyle(
+                            color: _yellow,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Créditos do projeto',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Fechar',
+                  ),
+                ],
               ),
-              SizedBox(width: 5),
-              Text(
-                'LOG TÉCNICO',
-                style: TextStyle(
-                  color: Color(0xFF98A8BA),
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                ),
+              const SizedBox(height: 8),
+              const Text(
+                'Este launcher só existe graças ao trabalho de quem traduz '
+                'e desenvolve para a comunidade brasileira.',
+                style: TextStyle(color: _muted, fontSize: 10, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              const _CreditProfile(
+                role: 'TRADUÇÃO PT-BR',
+                name: 'Luxx34',
+                description: 'Autor e mantenedor da tradução comunitária.',
+                githubUrl: 'https://github.com/Luxx34',
+                accent: _cyan,
+                icon: Icons.translate_rounded,
+              ),
+              const SizedBox(height: 10),
+              const _CreditProfile(
+                role: 'DESENVOLVIMENTO DO LAUNCHER',
+                name: 'MauricioIkeda',
+                description: 'Criador e mantenedor do launcher para Windows.',
+                githubUrl: 'https://github.com/MauricioIkeda',
+                accent: _coral,
+                icon: Icons.rocket_launch_rounded,
+              ),
+              const SizedBox(height: 15),
+              const Text(
+                'Projeto comunitário, gratuito e sem vínculo oficial com NTE.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF91A4B5), fontSize: 8),
               ),
             ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _CreditProfile extends StatelessWidget {
+  const _CreditProfile({
+    required this.role,
+    required this.name,
+    required this.description,
+    required this.githubUrl,
+    required this.accent,
+    required this.icon,
+  });
+
+  final String role;
+  final String name;
+  final String description;
+  final String githubUrl;
+  final Color accent;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openGitHubProfile(context, githubUrl),
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accent.withValues(alpha: .3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      role,
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: .9,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      style: const TextStyle(color: _muted, fontSize: 9),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                children: [
+                  Icon(Icons.open_in_new_rounded, color: accent, size: 16),
+                  const SizedBox(height: 3),
+                  Text(
+                    'GITHUB',
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 7,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .7,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _openGitHubProfile(BuildContext context, String url) async {
+  final opened = await launchUrl(
+    Uri.parse(url),
+    mode: LaunchMode.externalApplication,
+  );
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o GitHub.')),
     );
   }
 }
@@ -1079,14 +1529,14 @@ class _GlassSurface extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: const Color(0xB30A1421),
+            color: const Color(0xE60A2033),
             borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: const Color(0x4D9DC8DC)),
+            border: Border.all(color: const Color(0x667FD7E8)),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x6601060D),
-                blurRadius: 30,
-                offset: Offset(0, 14),
+                color: Color(0x7301060D),
+                blurRadius: 34,
+                offset: Offset(0, 16),
               ),
             ],
           ),
@@ -1107,9 +1557,9 @@ class _VersionTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _cyan.withValues(alpha: .12),
+        color: _cyan.withValues(alpha: .15),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: _cyan.withValues(alpha: .35)),
+        border: Border.all(color: _cyan.withValues(alpha: .42)),
       ),
       child: Text(
         label,
@@ -1124,34 +1574,37 @@ class _VersionTag extends StatelessWidget {
   }
 }
 
-class _SquareAction extends StatelessWidget {
-  const _SquareAction({
-    required this.tooltip,
+class _TopAction extends StatelessWidget {
+  const _TopAction({
+    required this.label,
     required this.icon,
     required this.onPressed,
   });
 
-  final String tooltip;
+  final String label;
   final IconData icon;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton.filled(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 23),
-        style: IconButton.styleFrom(
-          fixedSize: const Size(42, 42),
-          backgroundColor: const Color(0xD9E7F8FB),
-          foregroundColor: const Color(0xFF07141B),
-          disabledBackgroundColor: const Color(0x6633414F),
-          disabledForegroundColor: const Color(0xFF798693),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 17),
+      label: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.w900,
+          letterSpacing: .8,
         ),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: const Color(0xA60A2033),
+        side: BorderSide(color: Colors.white.withValues(alpha: .3)),
+        minimumSize: const Size(0, 42),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -1165,7 +1618,7 @@ String _statusText(LauncherController controller) {
           ? 'Tradução v${controller.installedVersion} instalada'
           : 'Sistema pronto para receber a tradução',
     LauncherStatus.downloading => 'Baixando ${controller.currentFile}',
-    LauncherStatus.installing => 'Aplicando arquivos com rollback protegido...',
+    LauncherStatus.installing => 'Instalando a tradução no jogo...',
     LauncherStatus.completed => 'Tradução instalada com sucesso',
     LauncherStatus.removing => 'Restaurando os arquivos originais...',
     LauncherStatus.error => 'Operação interrompida — consulte os detalhes',
@@ -1187,7 +1640,7 @@ IconData _statusIcon(LauncherStatus status) {
 Color _statusColor(LauncherStatus status) {
   return switch (status) {
     LauncherStatus.error => _coral,
-    LauncherStatus.completed => const Color(0xFF73F0B3),
+    LauncherStatus.completed => _green,
     _ => _cyan,
   };
 }
