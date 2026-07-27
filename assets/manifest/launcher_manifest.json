@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.0.1",
-  "publishedAt": "2026-07-27T09:05:59Z",
+  "version": "1.1.0",
+  "publishedAt": "2026-07-27T19:36:06Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.1/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 13888592,
-    "sha256": "5e7f0340a247836527d435eda738d4b1ef458af23c63066dcdf0d3ef338817bb"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.1.0/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19389327,
+    "sha256": "e8924fd71bbd43cce24d296748899a776b51e1e8e9c2df55a5836d7d1d023a8d"
   },
-  "releaseNotes": "Padroniza o nome como NTE Launcher Tradução PT-BR, atualiza o README e preserva a atualização das instalações 1.0.0.",
+  "releaseNotes": "Novo design inspirado em launchers gacha, interface simplificada, novas imagens e créditos clicáveis para os autores do projeto.",
   "mandatory": false
 }
