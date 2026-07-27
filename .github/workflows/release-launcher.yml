@@ -1,0 +1,145 @@
+name: Release Windows launcher
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version, without the v prefix"
+        required: true
+        type: string
+      release_notes:
+        description: "Short release notes shown in the launcher"
+        required: true
+        type: string
+      mandatory:
+        description: "Mark this update as mandatory"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-launcher
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_NOTES: ${{ inputs.release_notes }}
+        run: |
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $version = $env:INPUT_VERSION
+            $notes = $env:INPUT_NOTES -replace '[\r\n]+', ' '
+          } else {
+            $version = $env:REF_NAME.TrimStart("v")
+            $notes = "Atualização do launcher $version."
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must use MAJOR.MINOR.PATCH."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "notes=$notes" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Test project
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+      - name: Build Windows release
+        run: >
+          flutter build windows --release
+          --build-name "${{ steps.version.outputs.version }}"
+          --build-number "${{ github.run_number }}"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress --yes
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=${{ steps.version.outputs.version }}" `
+            "installer\NTE-Translation-Launcher.iss"
+
+      - name: Generate launcher manifest
+        shell: pwsh
+        env:
+          RELEASE_NOTES: ${{ steps.version.outputs.notes }}
+          MANDATORY_UPDATE: ${{ inputs.mandatory }}
+        run: |
+          $publishedAt = (Get-Date).ToUniversalTime().ToString("o")
+          $mandatory = if ($env:MANDATORY_UPDATE -eq "true") {
+            "--mandatory"
+          } else {
+            $null
+          }
+          python tool\generate_launcher_manifest.py `
+            --version "${{ steps.version.outputs.version }}" `
+            --installer "build\installer\NTE-Translation-Launcher-Setup.exe" `
+            --repository "${{ github.repository }}" `
+            --output "assets\manifest\launcher_manifest.json" `
+            --published-at $publishedAt `
+            --release-notes $env:RELEASE_NOTES `
+            $mandatory
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ steps.version.outputs.notes }}
+        shell: pwsh
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          gh release create $tag `
+            "build\installer\NTE-Translation-Launcher-Setup.exe" `
+            --repo "${{ github.repository }}" `
+            --target "${{ github.sha }}" `
+            --title "NTE Translation Launcher $tag" `
+            --notes $env:RELEASE_NOTES
+
+      - name: Update static launcher manifest on main
+        shell: pwsh
+        run: |
+          $savedManifest = Join-Path $env:RUNNER_TEMP "launcher_manifest.json"
+          Copy-Item "assets\manifest\launcher_manifest.json" $savedManifest
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          Copy-Item $savedManifest "assets\manifest\launcher_manifest.json"
+          git add "assets\manifest\launcher_manifest.json"
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Launcher manifest is already current."
+            exit 0
+          }
+          git commit -m "chore: publish launcher ${{ steps.version.outputs.version }}"
+          git push origin main

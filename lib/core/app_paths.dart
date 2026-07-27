@@ -21,7 +21,10 @@ class AppPaths {
   Directory get downloads => Directory(p.join(root.path, 'downloads'));
   Directory get originals => Directory(p.join(root.path, 'originals'));
   Directory get transactions => Directory(p.join(root.path, 'transactions'));
+  Directory get updates => Directory(p.join(root.path, 'updates'));
   File get cachedManifest => File(p.join(cache.path, 'manifest.json'));
+  File get updateInstaller =>
+      File(p.join(updates.path, 'NTE-Translation-Launcher-Setup.exe'));
   File get installReceipt => File(p.join(root.path, 'install_receipt.json'));
   File get logFile => File(p.join(root.path, 'launcher.log'));
 }

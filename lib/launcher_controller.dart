@@ -2,13 +2,15 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import 'core/app_paths.dart';
 import 'core/launcher_log.dart';
+import 'models/app_update_manifest.dart';
 import 'models/translation_manifest.dart';
+import 'services/app_update_service.dart';
 import 'services/download_service.dart';
 import 'services/elevation_service.dart';
+import 'services/game_platform_service.dart';
 import 'services/installation_service.dart';
 import 'services/manifest_repository.dart';
 import 'services/settings_service.dart';
@@ -27,9 +29,11 @@ class LauncherController extends ChangeNotifier {
   LauncherController({
     required this.paths,
     required this.log,
+    required this.appUpdates,
     required this.manifests,
     required this.downloads,
     required this.elevation,
+    required this.gamePlatforms,
     required this.installer,
     required this.settings,
     this.autoInstall = false,
@@ -37,9 +41,11 @@ class LauncherController extends ChangeNotifier {
 
   final AppPaths paths;
   final LauncherLog log;
+  final AppUpdateService appUpdates;
   final ManifestRepository manifests;
   final DownloadService downloads;
   final ElevationService elevation;
+  final GamePlatformService gamePlatforms;
   final InstallationService installer;
   final SettingsService settings;
   final bool autoInstall;
@@ -47,7 +53,15 @@ class LauncherController extends ChangeNotifier {
   LauncherStatus status = LauncherStatus.starting;
   TranslationManifest? manifest;
   String? gameDirectory;
+  GamePlatformInfo? gamePlatform;
   String? installedVersion;
+  String appVersion = '...';
+  AppUpdateManifest? availableAppUpdate;
+  bool checkingAppUpdate = false;
+  bool updatingLauncher = false;
+  bool automaticLauncherUpdates = false;
+  int appUpdateReceivedBytes = 0;
+  int appUpdateTotalBytes = 0;
   String? errorMessage;
   String currentFile = '';
   int receivedBytes = 0;
@@ -57,6 +71,7 @@ class LauncherController extends ChangeNotifier {
   double get progress =>
       totalBytes <= 0 ? 0 : (receivedBytes / totalBytes).clamp(0, 1);
   bool get isBusy =>
+      updatingLauncher ||
       status == LauncherStatus.downloading ||
       status == LauncherStatus.installing ||
       status == LauncherStatus.removing;
@@ -70,6 +85,7 @@ class LauncherController extends ChangeNotifier {
     try {
       gameDirectory = await settings.getGameDirectory();
       installedVersion = await settings.getInstalledVersion();
+      automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
       if (gameDirectory == null ||
           !await installer.isValidGameDirectory(gameDirectory!)) {
         const defaultPath = r'C:\Program Files\Neverness To Everness';
@@ -77,11 +93,19 @@ class LauncherController extends ChangeNotifier {
             ? defaultPath
             : null;
       }
+      if (gameDirectory != null) {
+        await _detectGamePlatform();
+      }
       manifest = await manifests.load();
       totalBytes = manifest!.totalBytes;
       status = LauncherStatus.ready;
       await log.info('Launcher inicializado.');
       notifyListeners();
+      await checkLauncherUpdates();
+      if (automaticLauncherUpdates && availableAppUpdate != null) {
+        await installLauncherUpdate();
+        return;
+      }
       if (autoInstall && gameDirectory != null) {
         await installOrUpdate();
         return;
@@ -113,6 +137,7 @@ class LauncherController extends ChangeNotifier {
       return;
     }
     gameDirectory = selected;
+    await _detectGamePlatform();
     await settings.setGameDirectory(selected);
     errorMessage = null;
     status = LauncherStatus.ready;
@@ -215,16 +240,87 @@ class LauncherController extends ChangeNotifier {
       return;
     }
     try {
-      await Process.start(
-        p.join(directory, InstallationService.gameExecutable),
-        const [],
-        workingDirectory: directory,
-        mode: ProcessStartMode.detached,
-      );
+      final platform = gamePlatform ?? await gamePlatforms.detect(directory);
+      gamePlatform = platform;
+      await log.info('Abrindo o jogo pela plataforma ${platform.label}.');
+      await gamePlatforms.launch(platform, directory);
     } catch (error, stackTrace) {
       await _setError('Não foi possível abrir o jogo.', error, stackTrace);
       notifyListeners();
     }
+  }
+
+  Future<void> checkLauncherUpdates() async {
+    if (checkingAppUpdate || updatingLauncher) {
+      return;
+    }
+    checkingAppUpdate = true;
+    notifyListeners();
+    try {
+      appVersion = await appUpdates.currentVersion();
+      availableAppUpdate = await appUpdates.check();
+    } catch (error, stackTrace) {
+      await log.error(
+        'Não foi possível verificar atualizações do launcher.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } finally {
+      checkingAppUpdate = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> setAutomaticLauncherUpdates(bool value) async {
+    automaticLauncherUpdates = value;
+    await settings.setAutomaticLauncherUpdates(value);
+    notifyListeners();
+  }
+
+  Future<void> installLauncherUpdate() async {
+    final update = availableAppUpdate;
+    if (update == null || updatingLauncher) {
+      return;
+    }
+    updatingLauncher = true;
+    appUpdateReceivedBytes = 0;
+    appUpdateTotalBytes = update.installerSize;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final installer = await appUpdates.downloadInstaller(
+        update,
+        onProgress: (received, total) {
+          appUpdateReceivedBytes = received;
+          appUpdateTotalBytes = total;
+          notifyListeners();
+        },
+      );
+      await appUpdates.startInstaller(installer);
+      await log.info(
+        'Instalador ${update.version} iniciado; encerrando launcher.',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      exit(0);
+    } catch (error, stackTrace) {
+      updatingLauncher = false;
+      await _setError(
+        'Não foi possível atualizar o launcher.',
+        error,
+        stackTrace,
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> _detectGamePlatform() async {
+    final directory = gameDirectory;
+    if (directory == null) {
+      gamePlatform = null;
+      return;
+    }
+    gamePlatform = await gamePlatforms.detect(directory);
+    await log.info('Plataforma detectada: ${gamePlatform!.label}.');
   }
 
   void clearError() {

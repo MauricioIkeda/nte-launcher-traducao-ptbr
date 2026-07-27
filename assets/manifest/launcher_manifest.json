@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "publishedAt": "2026-07-27T08:31:35Z",
+  "installer": {
+    "url": "https://github.com/MauricioIkeda/ntelauncher-traducao-2.0/releases/download/v1.0.0/NTE-Translation-Launcher-Setup.exe",
+    "size": 13873845,
+    "sha256": "fe2178536f09a598eb67fc205ede91466aa636982bf6491b34877a51461ea9ef"
+  },
+  "releaseNotes": "Primeira versão com instalador, atualização automática, ações claras e identidade visual própria.",
+  "mandatory": false
+}

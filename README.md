@@ -30,6 +30,9 @@ alterar a instalação do jogo.
 - escrita atômica e rollback automático em caso de falha;
 - elevação UAC apenas quando a pasta do jogo realmente exige;
 - log técnico persistente para facilitar diagnósticos.
+- detecção de instalações da Epic Games, Steam e launcher oficial;
+- atualização automática do próprio launcher por manifesto estático;
+- instalador Windows por usuário, com atalhos e desinstalador.
 
 ## Como funciona
 
@@ -155,6 +158,77 @@ Nenhum segredo precisa ser cadastrado manualmente.
 
 Se o commit automático for bloqueado, acesse **Settings > Actions > General >
 Workflow permissions**, marque **Read and write permissions** e salve.
+
+## Atualizações do launcher
+
+O launcher consulta também
+`assets/manifest/launcher_manifest.json`. Quando encontra uma versão semântica
+mais recente, oferece a atualização na própria interface.
+
+Antes de executar o novo instalador, ele valida:
+
+- URL HTTPS pertencente ao GitHub;
+- tamanho exato do arquivo;
+- SHA-256 publicado no manifesto.
+
+Em **Configurações**, o usuário pode habilitar a instalação automática ao abrir.
+Essa opção fica desabilitada por padrão. O instalador novo é iniciado em modo
+silencioso e o launcher atual é encerrado para que os arquivos possam ser
+substituídos com segurança.
+
+## Instalador Windows
+
+O projeto usa [Inno Setup](https://jrsoftware.org/isinfo.php). Para gerar o
+instalador localmente:
+
+```powershell
+C:\flutter\bin\flutter.bat build windows --release `
+  --build-name 1.0.0 --build-number 1
+
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" `
+  "/DMyAppVersion=1.0.0" `
+  "installer\NTE-Translation-Launcher.iss"
+```
+
+O arquivo será criado em:
+
+```text
+build/installer/NTE-Translation-Launcher-Setup.exe
+```
+
+A instalação padrão é feita em
+`%LOCALAPPDATA%\Programs\NTE Translation Launcher`, sem solicitar privilégios
+administrativos. Ela registra um desinstalador e oferece um atalho opcional na
+área de trabalho.
+
+> [!IMPORTANT]
+> O instalador atual não possui assinatura Authenticode. O Windows pode exibir
+> SmartScreen ou “Editor desconhecido”. Para distribuição ampla, adquira um
+> certificado de assinatura de código e assine o instalador no pipeline.
+
+## Publicar uma versão
+
+O workflow
+[`release-launcher.yml`](.github/workflows/release-launcher.yml) automatiza a
+publicação. Ele pode ser iniciado manualmente pela aba **Actions** ou por uma
+tag semântica:
+
+```powershell
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+O GitHub Action:
+
+1. executa análise e testes;
+2. compila o launcher Windows com a versão da tag;
+3. compila o instalador Inno Setup;
+4. calcula tamanho e SHA-256;
+5. publica o instalador em uma GitHub Release;
+6. atualiza o manifesto estático na branch `main`.
+
+O `GITHUB_TOKEN` existe somente durante o workflow e nunca é distribuído com o
+aplicativo.
 
 ## Testes
 
