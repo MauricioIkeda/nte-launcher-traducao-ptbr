@@ -1,0 +1,52 @@
+name: Update translation manifest
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-translation-manifest
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Generate manifest from latest translation release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tool/generate_manifest.py \
+            --repository Luxx34/nte-pt-br \
+            --output assets/manifest/translation_manifest.json
+
+      - name: Validate generator
+        run: python -m unittest discover -s tool -p "test_*.py"
+
+      - name: Commit manifest when it changed
+        shell: bash
+        run: |
+          if git diff --quiet -- assets/manifest/translation_manifest.json; then
+            echo "Manifest is already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/manifest/translation_manifest.json
+          git commit -m "chore: update translation manifest"
+          git push
