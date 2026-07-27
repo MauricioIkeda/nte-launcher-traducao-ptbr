@@ -9,11 +9,12 @@ import 'package:path/path.dart' as p;
 
 void main() {
   late Directory sandbox;
+  late AppPaths paths;
   late AppUpdateService service;
 
   setUp(() async {
     sandbox = await Directory.systemTemp.createTemp('nte-update-test-');
-    final paths = AppPaths.forTesting(Directory(p.join(sandbox.path, 'app')));
+    paths = AppPaths.forTesting(Directory(p.join(sandbox.path, 'app')));
     service = AppUpdateService(
       paths,
       LauncherLog(paths.logFile),
@@ -53,6 +54,13 @@ void main() {
     await expectLater(
       service.verifyInstaller(installer, manifest),
       throwsA(isA<AppUpdateException>()),
+    );
+  });
+
+  test('uses the standardized installer filename', () {
+    expect(
+      p.basename(paths.updateInstaller.path),
+      'NTE-Launcher-Traducao-PTBR-Setup.exe',
     );
   });
 }

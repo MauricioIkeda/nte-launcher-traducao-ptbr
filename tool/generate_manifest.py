@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 API_VERSION = "2022-11-28"
-USER_AGENT = "NTE-Translation-Launcher-Manifest-Updater/1.0"
+USER_AGENT = "NTE-Launcher-Traducao-PTBR-Manifest-Updater/1.0"
 SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 
 DESTINATIONS = {
