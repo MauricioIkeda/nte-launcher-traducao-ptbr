@@ -96,8 +96,9 @@ class LauncherController extends ChangeNotifier {
       if (gameDirectory != null) {
         await _detectGamePlatform();
       }
+      await _removeLegacyTranslationIfPresent();
       manifest = await manifests.load();
-      totalBytes = manifest!.totalBytes;
+      totalBytes = manifest?.totalBytes ?? 0;
       status = LauncherStatus.ready;
       await log.info('Launcher inicializado.');
       notifyListeners();
@@ -118,6 +119,27 @@ class LauncherController extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  Future<void> _removeLegacyTranslationIfPresent() async {
+    final version = installedVersion;
+    if (version == null ||
+        version.isEmpty ||
+        version.startsWith('nte-auto-')) {
+      return;
+    }
+    if (await installer.hasReceipt()) {
+      await installer.uninstall();
+      await log.info(
+        'Pacote legado $version removido antes da migração automática.',
+      );
+    } else {
+      await log.info(
+        'Registro legado $version descartado; não havia recibo de instalação.',
+      );
+    }
+    await settings.clearInstalledVersion();
+    installedVersion = null;
   }
 
   Future<void> chooseGameDirectory() async {

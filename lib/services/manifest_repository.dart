@@ -23,7 +23,7 @@ class ManifestRepository {
   final AppPaths paths;
   final LauncherLog log;
 
-  Future<TranslationManifest> load() async {
+  Future<TranslationManifest?> load() async {
     if (_remoteManifestUrl.isNotEmpty) {
       try {
         final remote = await _downloadRemoteManifest();
@@ -48,12 +48,21 @@ class ManifestRepository {
       }
     }
 
-    final bundledText = await rootBundle.loadString(_bundledManifest);
-    final bundled = _decode(bundledText);
-    await log.info(
-      'Manifesto embutido carregado: ${bundled.translationVersion}.',
-    );
-    return bundled;
+    try {
+      final bundledText = await rootBundle.loadString(_bundledManifest);
+      final bundled = _decode(bundledText);
+      await log.info(
+        'Manifesto embutido carregado: ${bundled.translationVersion}.',
+      );
+      return bundled;
+    } catch (error, stackTrace) {
+      await log.error(
+        'Ainda não existe uma versão publicada da tradução própria.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
   }
 
   Future<({TranslationManifest manifest, String source})>

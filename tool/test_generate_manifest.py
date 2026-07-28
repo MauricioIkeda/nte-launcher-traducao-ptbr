@@ -15,7 +15,7 @@ class GenerateManifestTests(unittest.TestCase):
                     "size": index + 1,
                     "digest": f"sha256:{str(index) * 64}",
                     "browser_download_url": (
-                        "https://github.com/Luxx34/nte-pt-br/"
+                        "https://github.com/owner/translation/"
                         f"releases/download/1.2.3/{name}"
                     ),
                 }
@@ -25,7 +25,7 @@ class GenerateManifestTests(unittest.TestCase):
 
         manifest = build_manifest(
             release,
-            "Luxx34/nte-pt-br",
+            "owner/translation",
             downloader=lambda *_: self.fail("Download should not be called"),
         )
 
@@ -40,7 +40,7 @@ class GenerateManifestTests(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(ValueError, "missing assets"):
-            build_manifest(release, "Luxx34/nte-pt-br")
+            build_manifest(release, "owner/translation")
 
     def test_downloads_asset_when_github_digest_is_missing(self):
         contents_by_name = {
@@ -56,7 +56,7 @@ class GenerateManifestTests(unittest.TestCase):
                     "size": len(contents_by_name[name]),
                     "digest": None,
                     "browser_download_url": (
-                        "https://github.com/Luxx34/nte-pt-br/"
+                        "https://github.com/owner/translation/"
                         f"releases/download/1.2.3/{name}"
                     ),
                 }
@@ -66,7 +66,7 @@ class GenerateManifestTests(unittest.TestCase):
 
         manifest = build_manifest(
             release,
-            "Luxx34/nte-pt-br",
+            "owner/translation",
             downloader=lambda url, _: contents_by_name[url.rsplit("/", 1)[-1]],
         )
 

@@ -159,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--repository",
-        default="Luxx34/nte-pt-br",
+        default="MauricioIkeda/nte-ptbr-automatic-translation",
         help="Public GitHub repository containing the translation releases.",
     )
     parser.add_argument(
@@ -172,6 +172,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Use a local release response instead of calling GitHub.",
     )
+    parser.add_argument(
+        "--allow-missing-release",
+        action="store_true",
+        help="Exit successfully when the repository has no release yet.",
+    )
     return parser.parse_args()
 
 
@@ -180,10 +185,16 @@ def main() -> int:
     if args.release_json:
         release = json.loads(args.release_json.read_text(encoding="utf-8"))
     else:
-        release = fetch_latest_release(
-            args.repository,
-            os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"),
-        )
+        try:
+            release = fetch_latest_release(
+                args.repository,
+                os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"),
+            )
+        except Exception as error:
+            if args.allow_missing_release and "404" in str(error):
+                print("No translation release is available yet.")
+                return 0
+            raise
 
     manifest = build_manifest(release, args.repository)
     changed = write_if_changed(args.output, manifest)

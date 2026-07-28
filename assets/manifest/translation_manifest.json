@@ -1,42 +1,6 @@
 {
   "schemaVersion": 1,
-  "translationVersion": "1.2.2",
-  "publishedAt": "2026-05-25T16:24:53Z",
-  "files": [
-    {
-      "name": "UniversalSigBypasser.asi",
-      "relativeDestination": "Client/WindowsNoEditor/HT/Binaries/Win64/UniversalSigBypasser.asi",
-      "url": "https://github.com/Luxx34/nte-pt-br/releases/download/1.2.2/UniversalSigBypasser.asi",
-      "size": 42496,
-      "sha256": "1374ac9e894e45e802f983958599b7c396b11d2cf8fac9b4556bac73d453798b"
-    },
-    {
-      "name": "version.dll",
-      "relativeDestination": "Client/WindowsNoEditor/HT/Binaries/Win64/version.dll",
-      "url": "https://github.com/Luxx34/nte-pt-br/releases/download/1.2.2/version.dll",
-      "size": 3577160,
-      "sha256": "810111a7f6a6cef892877c9f7c4582ccde2d621d119891f700c5309c370508bf"
-    },
-    {
-      "name": "pakchunk999-Windows_999_P.utoc",
-      "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.utoc",
-      "url": "https://github.com/Luxx34/nte-pt-br/releases/download/1.2.2/pakchunk999-Windows_999_P.utoc",
-      "size": 202,
-      "sha256": "b4953c4803f3649762951a9fd6e687fa2cff6e9974b18852532afa1af1facbe6"
-    },
-    {
-      "name": "pakchunk999-Windows_999_P.pak",
-      "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.pak",
-      "url": "https://github.com/Luxx34/nte-pt-br/releases/download/1.2.2/pakchunk999-Windows_999_P.pak",
-      "size": 14290639,
-      "sha256": "c17d8d43b95077ae91c6a155bc42d787ded574efd18a82e938c39fe426284ae9"
-    },
-    {
-      "name": "pakchunk999-Windows_999_P.ucas",
-      "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.ucas",
-      "url": "https://github.com/Luxx34/nte-pt-br/releases/download/1.2.2/pakchunk999-Windows_999_P.ucas",
-      "size": 64,
-      "sha256": "df57115aad16e8091095a332298086a62acfd2f5bc1e82fdd59e8cdcb667ee4c"
-    }
-  ]
+  "translationVersion": "pending",
+  "publishedAt": "2026-07-28T00:00:00Z",
+  "files": []
 }
