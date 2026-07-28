@@ -120,7 +120,7 @@ O workflow
 é executado periodicamente e também pode ser iniciado manualmente. Ele:
 
 1. consulta a release mais recente de
-   [`MauricioIkeda/nte-ptbr-automatic-translation`](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation);
+   [`Luxx34/nte-pt-br`](https://github.com/Luxx34/nte-pt-br);
 2. exige os arquivos conhecidos da tradução;
 3. valida nomes, URLs e tamanhos;
 4. obtém ou calcula o SHA-256;
