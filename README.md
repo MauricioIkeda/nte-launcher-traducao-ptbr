@@ -162,6 +162,37 @@ tradução.
 
 ## Desenvolvimento
 
+### Preparar um computador novo
+
+Baixe este repositório como ZIP, extraia a pasta e execute:
+
+```text
+Preparar-Ambiente-NTE.cmd
+```
+
+O preparador é idempotente: detecta e preserva o que já estiver instalado. Ele
+configura Git, GitHub CLI, GitHub Desktop, VS Code, Python, Flutter/Dart, Inno
+Setup e Visual Studio com a carga de trabalho C++; autentica o GitHub pelo
+navegador; baixa o launcher e a pipeline privada; instala as ferramentas do
+NTE; prepara as dependências; executa validações e cria atalhos para o Studio e
+para o workspace do VS Code.
+
+A chave Gemini e a chave AES não são incorporadas ao instalador nem ao Git.
+Em um computador novo, elas são solicitadas uma vez pela configuração local da
+pipeline. O login do GitHub é armazenado pelo mecanismo seguro utilizado pelo
+GitHub CLI.
+
+O mesmo arquivo pode ser executado novamente depois. Repositórios com
+alterações locais não são atualizados automaticamente, evitando que um
+trabalho ainda não commitado seja sobrescrito.
+
+A memória SQLite e as correções manuais não fazem parte do código Git. Antes
+de formatar ou trocar de computador, use o atalho
+**Salvar estado da tradução NTE** criado na área de trabalho. Ele envia somente
+o banco de tradução para uma release de backup do repositório privado, sem as
+chaves Gemini/AES. Em um computador novo, o preparador restaura
+automaticamente o backup privado mais recente.
+
 ### Requisitos
 
 - Windows 10 ou 11;
