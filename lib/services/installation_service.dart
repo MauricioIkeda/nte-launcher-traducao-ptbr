@@ -15,6 +15,8 @@ class InstallationService {
   final AppPaths paths;
   final LauncherLog log;
 
+  Future<bool> hasReceipt() => paths.installReceipt.exists();
+
   Future<bool> isValidGameDirectory(String path) async {
     return File(p.join(path, gameExecutable)).exists();
   }

@@ -410,20 +410,28 @@ class _UpdatePanel extends StatelessWidget {
         controller.isInstalled &&
         availableVersion != null &&
         controller.installedVersion == availableVersion;
-    final actionLabel = !controller.isInstalled
+    final actionLabel = manifest == null
+        ? 'AGUARDANDO PRIMEIRA TRADUÇÃO'
+        : !controller.isInstalled
         ? 'INSTALAR TRADUÇÃO'
         : translationIsCurrent
         ? 'JOGAR AGORA  •  ${controller.gamePlatform?.label.toUpperCase() ?? 'NTE'}'
         : 'ATUALIZAR TRADUÇÃO  •  v${availableVersion ?? '...'}';
-    final actionIcon = translationIsCurrent
+    final actionIcon = manifest == null
+        ? Icons.hourglass_top_rounded
+        : translationIsCurrent
         ? Icons.play_arrow_rounded
         : Icons.download_done_rounded;
-    final actionEnabled = translationIsCurrent
+    final actionEnabled = manifest == null
+        ? false
+        : translationIsCurrent
         ? controller.gameDirectory != null && !controller.isBusy
         : controller.canInstall;
-    final action = translationIsCurrent
-        ? controller.launchGame
-        : controller.installOrUpdate;
+    final VoidCallback? action = manifest == null
+        ? null
+        : translationIsCurrent
+        ? () => controller.launchGame()
+        : () => controller.installOrUpdate();
     return _GlassSurface(
       radius: 22,
       padding: const EdgeInsets.fromLTRB(20, 19, 20, 18),
@@ -473,7 +481,7 @@ class _UpdatePanel extends StatelessWidget {
                 children: [
                   _VersionTag(
                     label: manifest == null
-                        ? 'SINCRONIZANDO'
+                        ? 'SEM VERSÃO PUBLICADA'
                         : 'PACOTE v${manifest.translationVersion}',
                   ),
                   const SizedBox(height: 7),
@@ -530,7 +538,7 @@ class _UpdatePanel extends StatelessWidget {
                     label: actionLabel,
                     icon: actionIcon,
                     enabled: actionEnabled,
-                    onPressed: action,
+                    onPressed: action ?? () {},
                   ),
                 ),
               ],
@@ -1365,18 +1373,9 @@ class _CreditsDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Este launcher só existe graças ao trabalho de quem traduz '
-                'e desenvolve para a comunidade brasileira.',
+                'Tradução própria gerada pela pipeline NTE Translation '
+                'Studio, com revisão e correções da comunidade brasileira.',
                 style: TextStyle(color: _muted, fontSize: 10, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              const _CreditProfile(
-                role: 'TRADUÇÃO PT-BR',
-                name: 'Luxx34',
-                description: 'Autor e mantenedor da tradução comunitária.',
-                githubUrl: 'https://github.com/Luxx34',
-                accent: _cyan,
-                icon: Icons.translate_rounded,
               ),
               const SizedBox(height: 10),
               const _CreditProfile(

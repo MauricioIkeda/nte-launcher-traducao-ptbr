@@ -119,8 +119,8 @@ O workflow
 [`update-translation-manifest.yml`](.github/workflows/update-translation-manifest.yml)
 é executado periodicamente e também pode ser iniciado manualmente. Ele:
 
-1. consulta a release mais recente de
-   [`Luxx34/nte-pt-br`](https://github.com/Luxx34/nte-pt-br);
+1. consulta a release mais recente da nossa
+   [pipeline automática](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation);
 2. exige os arquivos conhecidos da tradução;
 3. valida nomes, URLs e tamanhos;
 4. obtém ou calcula o SHA-256;
@@ -131,7 +131,10 @@ O launcher consulta, nesta ordem:
 
 1. manifesto remoto;
 2. última cópia válida armazenada em cache;
-3. manifesto de emergência incluído no aplicativo.
+3. manifesto embutido, quando já existe uma tradução própria publicada.
+
+Quando a pipeline publica uma tradução, ela aciona imediatamente a atualização
+do manifesto. A consulta periódica funciona como redundância.
 
 Nenhum token do GitHub é distribuído com o launcher.
 
@@ -258,10 +261,12 @@ Os endereços podem ser substituídos em builds personalizados com
 
 ## Créditos
 
-- Tradução PT-BR:
-  [`Luxx34/nte-pt-br`](https://github.com/Luxx34/nte-pt-br)
+- Tradução PT-BR: [NTE Translation Studio](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation)
 - Certificados:
   [cURL CA Extract](https://curl.se/docs/caextract.html)
+- Carregamento técnico:
+  [UniversalSigBypasser](https://github.com/rm-NoobInCoding/UniversalSigBypasser)
+  e [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
 - Interface e launcher: Flutter
 
 Contribuições e relatos de problemas são bem-vindos.
