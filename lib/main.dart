@@ -1379,9 +1379,11 @@ class _CreditsDialog extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const _CreditProfile(
-                role: 'DESENVOLVIMENTO DO LAUNCHER',
+                role: 'TRADUÇÃO PT-BR E DESENVOLVIMENTO',
                 name: 'MauricioIkeda',
-                description: 'Criador e mantenedor do launcher para Windows.',
+                description:
+                    'Responsável pela tradução PT-BR, pipeline automática '
+                    'e desenvolvimento do launcher para Windows.',
                 githubUrl: 'https://github.com/MauricioIkeda',
                 accent: _coral,
                 icon: Icons.rocket_launch_rounded,

@@ -261,12 +261,14 @@ Os endereços podem ser substituídos em builds personalizados com
 
 ## Créditos
 
-- Tradução PT-BR: [NTE Translation Studio](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation)
+- Tradução PT-BR e pipeline automática:
+  [MauricioIkeda / NTE Translation Studio](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation)
 - Certificados:
   [cURL CA Extract](https://curl.se/docs/caextract.html)
 - Carregamento técnico:
   [UniversalSigBypasser](https://github.com/rm-NoobInCoding/UniversalSigBypasser)
   e [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
-- Interface e launcher: Flutter
+- Desenvolvimento do launcher: [MauricioIkeda](https://github.com/MauricioIkeda)
+- Interface: Flutter
 
 Contribuições e relatos de problemas são bem-vindos.
