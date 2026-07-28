@@ -159,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--repository",
-        default="MauricioIkeda/nte-ptbr-automatic-translation",
+        default="MauricioIkeda/nte-ptbr-releases",
         help="Public GitHub repository containing the translation releases.",
     )
     parser.add_argument(

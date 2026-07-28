@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python tool/generate_manifest.py \
-            --repository MauricioIkeda/nte-ptbr-automatic-translation \
+            --repository MauricioIkeda/nte-ptbr-releases \
             --output assets/manifest/translation_manifest.json \
             --allow-missing-release
 

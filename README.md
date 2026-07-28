@@ -119,8 +119,8 @@ O workflow
 [`update-translation-manifest.yml`](.github/workflows/update-translation-manifest.yml)
 é executado periodicamente e também pode ser iniciado manualmente. Ele:
 
-1. consulta a release mais recente da nossa
-   [pipeline automática](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation);
+1. consulta a release mais recente do nosso
+   [repositório público de tradução](https://github.com/MauricioIkeda/nte-ptbr-releases);
 2. exige os arquivos conhecidos da tradução;
 3. valida nomes, URLs e tamanhos;
 4. obtém ou calcula o SHA-256;
@@ -262,7 +262,7 @@ Os endereços podem ser substituídos em builds personalizados com
 ## Créditos
 
 - Tradução PT-BR e pipeline automática:
-  [MauricioIkeda / NTE Translation Studio](https://github.com/MauricioIkeda/nte-ptbr-automatic-translation)
+  MauricioIkeda / NTE Translation Studio
 - Certificados:
   [cURL CA Extract](https://curl.se/docs/caextract.html)
 - Carregamento técnico:
