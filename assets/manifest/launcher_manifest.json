@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.0.1",
-  "publishedAt": "2026-07-28T03:44:09Z",
+  "version": "1.0.2",
+  "publishedAt": "2026-07-28T06:27:53Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.1/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19394152,
-    "sha256": "905a304539c7706e2b8b00620b53fa672516096f8135711cd4a13d9463533a81"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.2/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19390208,
+    "sha256": "a4296d4b7bcb2594e2e536c7c2fa1580aeb2939efce903cea94191df35163d9e"
   },
-  "releaseNotes": "Atualiza os créditos de MauricioIkeda pela tradução PT-BR, pipeline automática e desenvolvimento do launcher.",
+  "releaseNotes": "Separa a pipeline privada e passa a consumir o repositório público oficial da tradução.",
   "mandatory": false
 }
