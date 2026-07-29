@@ -144,15 +144,18 @@ Dados de outra pasta nunca são reutilizados.
 
 O workflow
 [`update-translation-manifest.yml`](.github/workflows/update-translation-manifest.yml)
-é executado periodicamente e também pode ser iniciado manualmente. Ele:
+possui dois modos explícitos:
 
-1. consulta a release mais recente do nosso
-   [repositório público de tradução](https://github.com/MauricioIkeda/nte-ptbr-releases);
-2. exige os arquivos conhecidos da tradução;
-3. valida nomes, URLs e tamanhos;
-4. obtém ou calcula o SHA-256;
-5. executa os testes do gerador;
-6. atualiza o manifesto somente quando a tradução muda.
+1. **dispatch:** recebe da pipeline a tag e o hash do manifesto exatos, busca
+   somente essa release e valida payload, bytes, JSON e assets;
+2. **recuperação:** no cron ou acionamento manual, lista releases publicadas,
+   ignora ferramentas, drafts e prereleases e seleciona a candidata válida mais
+   recente.
+
+Antes de atualizar, o workflow cruza o manifesto publicado com os cinco assets
+instaláveis, restringe URLs e destinos e bloqueia downgrade, tag mutável ou
+datas ambíguas. A branch é atualizada e a monotonicidade é conferida novamente
+antes do commit; um retry controlado de push também repete essa prova.
 
 O launcher consulta, nesta ordem:
 
@@ -168,6 +171,9 @@ Quando a pipeline publica uma tradução, ela aciona imediatamente a atualizaç�
 do manifesto. A consulta periódica funciona como redundância.
 
 Nenhum token do GitHub é distribuído com o launcher.
+
+O contrato, as validações e o comportamento idempotente estão documentados em
+[`docs/TRANSLATION_MANIFEST_SYNC.md`](docs/TRANSLATION_MANIFEST_SYNC.md).
 
 ## Atualização do launcher
 

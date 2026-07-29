@@ -17,41 +17,147 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
-      - name: Check out repository
+      - name: Check out launcher main
         uses: actions/checkout@v6
         with:
           ref: main
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Generate manifest from latest translation release
+      - name: Validate synchronization tools
+        run: |
+          python -m compileall -q tool
+          python -m unittest discover -s tool -p "test_*.py"
+
+      - name: Resolve, validate and commit the exact manifest
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_FILE: ${{ github.event_path }}
         run: |
+          set -euo pipefail
+
+          manifest="assets/manifest/translation_manifest.json"
+          candidate="$RUNNER_TEMP/validated-translation-manifest.json"
+          initial_result="$RUNNER_TEMP/manifest-initial-result.json"
+          final_result="$RUNNER_TEMP/manifest-final-result.json"
+          summary="$RUNNER_TEMP/manifest-summary.md"
+
+          append_summary() {
+            if [[ -f "$summary" ]]; then
+              cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+          trap append_summary EXIT
+
+          mode="recovery"
+          args=(--mode recovery)
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            mode="dispatch"
+            args=(--mode dispatch --event-file "$EVENT_FILE")
+          fi
+
           python tool/generate_manifest.py \
-            --repository MauricioIkeda/nte-ptbr-releases \
-            --output assets/manifest/translation_manifest.json \
-            --allow-missing-release
+            "${args[@]}" \
+            --output "$manifest" \
+            --result "$initial_result" \
+            --summary "$summary"
 
-      - name: Validate generator
-        run: python -m unittest discover -s tool -p "test_*.py"
-
-      - name: Commit manifest when it changed
-        shell: bash
-        run: |
-          if git diff --quiet -- assets/manifest/translation_manifest.json; then
-            echo "Manifest is already current."
+          decision="$(python -c \
+            'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["decision"])' \
+            "$initial_result")"
+          if [[ "$decision" == "no-valid-release" ]]; then
+            echo "Recovery found no valid translation release."
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/manifest/translation_manifest.json
-          git commit -m "chore: update translation manifest"
-          git push origin HEAD:main
+          cp "$manifest" "$candidate"
+          git restore -- "$manifest"
+          git pull --ff-only origin main
+
+          apply_candidate() {
+            python tool/generate_manifest.py \
+              --mode apply-candidate \
+              --candidate "$candidate" \
+              --output "$manifest" \
+              --result "$final_result" \
+              --summary "$summary"
+          }
+
+          validate_expected_diff() {
+            python tool/generate_manifest.py \
+              --mode verify \
+              --output "$manifest"
+            python -m unittest discover -s tool -p "test_*.py"
+            unexpected="$(git status --porcelain=v1 | \
+              awk '{print $2}' | \
+              grep -Fvx "$manifest" || true)"
+            if [[ -n "$unexpected" ]]; then
+              echo "Unexpected files changed:"
+              echo "$unexpected"
+              exit 1
+            fi
+            git diff --check
+          }
+
+          create_commit() {
+            local tag
+            tag="$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["tag"])' \
+              "$final_result")"
+            if ! [[ "$tag" =~ ^nte-auto-[0-9]{8}-[0-9]{6}-[0-9a-f]{12}$ ]]; then
+              echo "Validated tag unexpectedly failed the shell safety check."
+              exit 1
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email \
+              "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- "$manifest"
+            git commit -m "chore: update translation manifest to $tag"
+          }
+
+          apply_candidate
+          changed="$(python -c \
+            'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8"))["changed"]).lower())' \
+            "$final_result")"
+          if [[ "$changed" != "true" ]]; then
+            echo "Manifest is already current after refreshing main."
+            exit 0
+          fi
+
+          validate_expected_diff
+          create_commit
+
+          for attempt in 1 2; do
+            if git push origin HEAD:main; then
+              commit="$(git rev-parse HEAD)"
+              printf '\n- Commit criado: `%s`\n' "$commit" >> "$summary"
+              exit 0
+            fi
+            if [[ "$attempt" == "2" ]]; then
+              echo "Push was rejected after the controlled retry."
+              exit 1
+            fi
+
+            echo "Push rejected; refreshing main and revalidating monotonicity."
+            git fetch origin main
+            git checkout --detach origin/main
+            apply_candidate
+            changed="$(python -c \
+              'import json,sys; print(str(json.load(open(sys.argv[1], encoding="utf-8"))["changed"]).lower())' \
+              "$final_result")"
+            if [[ "$changed" != "true" ]]; then
+              echo "Another run already installed the same manifest."
+              exit 0
+            fi
+            validate_expected_diff
+            create_commit
+          done
