@@ -113,19 +113,49 @@ O cliente HTTPS combina as raízes confiáveis do Windows com o bundle de
 certificados do projeto cURL/Mozilla. Isso corrige ambientes em que a cadeia de
 certificados apresentada ao Flutter não pode ser validada apenas pelo sistema.
 
+### Estado local, recibos e backups
+
+O estado exibido pelo launcher vem dos arquivos reais encontrados no diretório
+selecionado. A versão salva nas preferências é apenas metadado de migração: ela
+não comprova que a tradução continua instalada.
+
+Cada instalação do NTE recebe um identificador SHA-256 derivado do caminho
+canônico e mantém dados independentes:
+
+```text
+installations/
+  <installation-id>/
+    receipt.json
+    originals/
+    transactions/
+```
+
+O recibo versionado registra os hashes do que foi instalado e dos originais.
+Instalação, atualização e reparo usam uma transação com validação final; o
+recibo só é confirmado depois que todos os destinos passam por tamanho e
+SHA-256.
+
+Na remoção, um arquivo ainda igual ao instalado pelo launcher é restaurado ou
+excluído. Se ele tiver sido alterado depois, o launcher o preserva, informa uma
+remoção parcial e mantém o recibo e os backups necessários para diagnóstico.
+Dados de outra pasta nunca são reutilizados.
+
 ## Atualização da tradução
 
 O workflow
 [`update-translation-manifest.yml`](.github/workflows/update-translation-manifest.yml)
-é executado periodicamente e também pode ser iniciado manualmente. Ele:
+possui dois modos explícitos:
 
-1. consulta a release mais recente do nosso
-   [repositório público de tradução](https://github.com/MauricioIkeda/nte-ptbr-releases);
-2. exige os arquivos conhecidos da tradução;
-3. valida nomes, URLs e tamanhos;
-4. obtém ou calcula o SHA-256;
-5. executa os testes do gerador;
-6. atualiza o manifesto somente quando a tradução muda.
+1. **dispatch:** recebe da pipeline a tag e o hash do manifesto exatos, busca
+   somente essa release e valida payload, bytes, JSON e assets;
+2. **recuperação:** no cron ou acionamento manual, lista releases publicadas,
+   ignora ferramentas, drafts e prereleases e seleciona a candidata válida mais
+   recente.
+
+Antes de atualizar, o workflow cruza o manifesto publicado com os cinco assets
+instaláveis, restringe URLs e destinos e bloqueia downgrade, tag mutável ou
+datas ambíguas. A branch é atualizada e a monotonicidade é conferida novamente
+antes do commit; um retry controlado de push também repete essa prova.
 
 O launcher consulta, nesta ordem:
 
@@ -133,10 +163,17 @@ O launcher consulta, nesta ordem:
 2. última cópia válida armazenada em cache;
 3. manifesto embutido, quando já existe uma tradução própria publicada.
 
+A origem aparece na interface. Somente um manifesto remoto válido e
+comprovadamente mais novo pode iniciar atualização automática; cache e bundle
+mantêm o modo offline, mas nunca provocam downgrade.
+
 Quando a pipeline publica uma tradução, ela aciona imediatamente a atualização
 do manifesto. A consulta periódica funciona como redundância.
 
 Nenhum token do GitHub é distribuído com o launcher.
+
+O contrato, as validações e o comportamento idempotente estão documentados em
+[`docs/TRANSLATION_MANIFEST_SYNC.md`](docs/TRANSLATION_MANIFEST_SYNC.md).
 
 ## Atualização do launcher
 

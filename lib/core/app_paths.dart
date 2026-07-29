@@ -24,6 +24,7 @@ class AppPaths {
   Directory get downloads => Directory(p.join(root.path, 'downloads'));
   Directory get originals => Directory(p.join(root.path, 'originals'));
   Directory get transactions => Directory(p.join(root.path, 'transactions'));
+  Directory get installations => Directory(p.join(root.path, 'installations'));
   Directory get updates => Directory(p.join(root.path, 'updates'));
   File get cachedManifest =>
       File(p.join(cache.path, 'automatic-translation-v1.json'));

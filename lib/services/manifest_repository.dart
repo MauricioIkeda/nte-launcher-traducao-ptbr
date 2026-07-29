@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../core/app_paths.dart';
 import '../core/launcher_log.dart';
 import '../core/trusted_http_client.dart';
+import '../models/loaded_translation_manifest.dart';
 import '../models/translation_manifest.dart';
 
 typedef RemoteManifestDownloader = Future<String> Function(Uri uri);
@@ -36,7 +37,7 @@ class ManifestRepository {
   final String _remoteManifestUrl;
   final RemoteManifestDownloader? remoteManifestDownloader;
 
-  Future<TranslationManifest?> load() async {
+  Future<LoadedTranslationManifest?> load() async {
     if (_remoteManifestUrl.isNotEmpty) {
       try {
         final remote = await _downloadRemoteManifest();
@@ -45,7 +46,10 @@ class ManifestRepository {
           'Manifesto remoto carregado: '
           '${remote.manifest.translationVersion}.',
         );
-        return remote.manifest;
+        return LoadedTranslationManifest(
+          manifest: remote.manifest,
+          source: ManifestSource.remote,
+        );
       } catch (error, stackTrace) {
         await log.error(
           'Falha no manifesto remoto; tentando cache.',
@@ -57,7 +61,10 @@ class ManifestRepository {
       final cached = await _loadCache();
       if (cached != null) {
         await log.info('Manifesto em cache carregado.');
-        return cached;
+        return LoadedTranslationManifest(
+          manifest: cached,
+          source: ManifestSource.cache,
+        );
       }
     }
 
@@ -67,7 +74,10 @@ class ManifestRepository {
       await log.info(
         'Manifesto embutido carregado: ${bundled.translationVersion}.',
       );
-      return bundled;
+      return LoadedTranslationManifest(
+        manifest: bundled,
+        source: ManifestSource.bundled,
+      );
     } catch (error, stackTrace) {
       await log.error(
         'Ainda não existe uma versão publicada da tradução própria.',

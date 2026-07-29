@@ -6,181 +6,382 @@ import 'package:nte_translation_launcher/core/app_paths.dart';
 import 'package:nte_translation_launcher/core/launcher_log.dart';
 import 'package:nte_translation_launcher/launcher_controller.dart';
 import 'package:nte_translation_launcher/models/app_update_manifest.dart';
+import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart';
+import 'package:nte_translation_launcher/models/translation_installation.dart';
 import 'package:nte_translation_launcher/models/translation_manifest.dart';
 import 'package:nte_translation_launcher/services/app_update_service.dart';
 import 'package:nte_translation_launcher/services/download_service.dart';
 import 'package:nte_translation_launcher/services/elevation_service.dart';
+import 'package:nte_translation_launcher/services/file_integrity_service.dart';
 import 'package:nte_translation_launcher/services/game_platform_service.dart';
 import 'package:nte_translation_launcher/services/installation_service.dart';
+import 'package:nte_translation_launcher/services/legacy_migration_service.dart';
 import 'package:nte_translation_launcher/services/manifest_repository.dart';
+import 'package:nte_translation_launcher/services/receipt_repository.dart';
+import 'package:nte_translation_launcher/services/safe_path_service.dart';
 import 'package:nte_translation_launcher/services/settings_service.dart';
+import 'package:nte_translation_launcher/services/translation_verification_service.dart';
+import 'package:path/path.dart' as p;
+
+import 'test_support.dart';
 
 void main() {
   late Directory sandbox;
+  late Directory game;
   late AppPaths paths;
   late LauncherLog log;
-  late TranslationManifest latestManifest;
+  late _Harness harness;
+  const contents = [
+    [1, 2, 3],
+    [4, 5, 6, 7],
+  ];
 
   setUp(() async {
-    sandbox = await Directory.systemTemp.createTemp('nte-controller-test-');
-    paths = AppPaths.forTesting(sandbox);
+    sandbox = await Directory.systemTemp.createTemp('nte-controller-');
+    game = await createGame(sandbox, 'game');
+    paths = AppPaths.forTesting(Directory(p.join(sandbox.path, 'app')));
     log = LauncherLog(paths.logFile);
-    latestManifest = TranslationManifest.fromJson({
-      'schemaVersion': 1,
-      'translationVersion': 'nte-auto-20260729-new',
-      'publishedAt': '2026-07-29T06:25:21Z',
-      'files': [
-        {
-          'name': 'translation.pak',
-          'relativeDestination': 'Client/Content/Paks/translation.pak',
-          'url': 'https://github.com/example/releases/translation.pak',
-          'size': 42,
-          'sha256': 'a' * 64,
-        },
-      ],
-    });
+    harness = _Harness(paths, log);
   });
 
-  tearDown(() async {
-    if (await sandbox.exists()) {
-      await sandbox.delete(recursive: true);
-    }
-  });
+  tearDown(() => sandbox.delete(recursive: true));
 
-  test('automatically installs a newer translation during startup', () async {
-    final settings = _FakeSettingsService(sandbox.path);
-    final installer = _FakeInstallationService(paths, log);
-    final downloads = _FakeDownloadService(paths, log);
-    final controller = _controller(
-      paths: paths,
-      log: log,
-      manifest: latestManifest,
+  test('persisted version alone is never proof of installation', () async {
+    final settings = _FakeSettings(game.path)
+      ..installedVersion = 'false-version';
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
       settings: settings,
-      installer: installer,
-      downloads: downloads,
+    );
+
+    await controller.initialize();
+
+    expect(
+      controller.verification.status,
+      TranslationInstallationStatus.notInstalled,
+    );
+    expect(controller.isInstalled, isFalse);
+    expect(settings.installedVersion, isNull);
+  });
+
+  test('initialization verifies disk before exposing ready state', () async {
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: _FakeSettings(game.path),
     );
     final statuses = <LauncherStatus>[];
     controller.addListener(() => statuses.add(controller.status));
 
     await controller.initialize();
 
-    expect(installer.installedVersion, latestManifest.translationVersion);
-    expect(settings.installedVersion, latestManifest.translationVersion);
-    expect(controller.installedVersion, latestManifest.translationVersion);
-    expect(controller.translationIsCurrent, isTrue);
-    expect(controller.status, LauncherStatus.completed);
-    expect(statuses, contains(LauncherStatus.downloading));
-    expect(statuses, contains(LauncherStatus.installing));
+    expect(statuses, contains(LauncherStatus.loadingManifest));
+    expect(statuses, contains(LauncherStatus.verifying));
+    expect(statuses.last, LauncherStatus.ready);
   });
 
   test(
-    'blocks play and removal while an automatic update is downloading',
+    'newer remote translation is automatically installed and reverified',
     () async {
-      final settings = _FakeSettingsService(sandbox.path);
-      final installer = _FakeInstallationService(paths, log);
-      final downloads = _FakeDownloadService(paths, log, pauseDownload: true);
-      final gamePlatforms = _FakeGamePlatformService();
-      final controller = _controller(
-        paths: paths,
-        log: log,
-        manifest: latestManifest,
-        settings: settings,
-        installer: installer,
-        downloads: downloads,
-        gamePlatforms: gamePlatforms,
+      final oldContents = const [
+        [8, 8, 8],
+        [7, 7, 7, 7],
+      ];
+      final oldManifest = testManifest(
+        version: 'old',
+        publishedAt: DateTime.utc(2026, 7, 28),
+        contents: oldContents,
+      );
+      final oldStage = await createStage(sandbox, oldManifest, oldContents);
+      await harness.installer.install(oldManifest, oldStage, game.path);
+      final latest = testManifest(contents: contents);
+      final controller = harness.controller(
+        manifest: latest,
+        contents: contents,
+        settings: _FakeSettings(game.path),
       );
 
-      final initialization = controller.initialize();
-      await downloads.started.future;
+      await controller.initialize();
 
-      expect(controller.status, LauncherStatus.downloading);
-      expect(controller.isBusy, isTrue);
-      await controller.launchGame();
-      await controller.removeTranslation();
-      expect(gamePlatforms.launchCount, 0);
-      expect(installer.uninstallCount, 0);
-
-      downloads.release();
-      await initialization;
+      expect(controller.translationIsCurrent, isTrue);
+      expect(controller.installedVersion, latest.translationVersion);
+      expect(controller.status, LauncherStatus.completed);
     },
   );
-}
 
-LauncherController _controller({
-  required AppPaths paths,
-  required LauncherLog log,
-  required TranslationManifest manifest,
-  required _FakeSettingsService settings,
-  required _FakeInstallationService installer,
-  required _FakeDownloadService downloads,
-  _FakeGamePlatformService? gamePlatforms,
-}) {
-  return LauncherController(
-    paths: paths,
-    log: log,
-    appUpdates: _FakeAppUpdateService(paths, log),
-    manifests: _FakeManifestRepository(paths, log, manifest),
-    downloads: downloads,
-    elevation: _FakeElevationService(log),
-    gamePlatforms: gamePlatforms ?? _FakeGamePlatformService(),
-    installer: installer,
-    settings: settings,
+  test(
+    'changing directory triggers fresh verification for that directory',
+    () async {
+      final other = await createGame(sandbox, 'other');
+      final manifest = testManifest(contents: contents);
+      await _writeFiles(other, manifest, contents);
+      final controller = harness.controller(
+        manifest: manifest,
+        contents: contents,
+        settings: _FakeSettings(null),
+      );
+      await controller.initialize();
+
+      await controller.selectGameDirectory(other.path);
+
+      expect(controller.gameDirectory, other.path);
+      expect(controller.translationIsCurrent, isTrue);
+    },
   );
+
+  test(
+    'stale verification result cannot overwrite a newer directory',
+    () async {
+      final first = await createGame(sandbox, 'first');
+      final second = await createGame(sandbox, 'second');
+      final manifest = testManifest(contents: contents);
+      await _writeFiles(second, manifest, contents);
+      final delayed = _DelayedVerifier(
+        integrity: harness.integrity,
+        receipts: harness.receipts,
+        safePaths: harness.safePaths,
+        log: log,
+        delayedDirectory: first.path,
+      );
+      final controller = harness.controller(
+        manifest: manifest,
+        contents: contents,
+        settings: _FakeSettings(null),
+        verifier: delayed,
+      );
+      await controller.initialize();
+
+      final firstSelection = controller.selectGameDirectory(first.path);
+      await delayed.started.future;
+      await controller.selectGameDirectory(second.path);
+      delayed.release.complete();
+      await firstSelection;
+
+      expect(controller.gameDirectory, second.path);
+      expect(controller.translationIsCurrent, isTrue);
+    },
+  );
+
+  test('manual installation finishes with a new real verification', () async {
+    final manifest = testManifest(contents: contents);
+    final controller = harness.controller(
+      manifest: manifest,
+      contents: contents,
+      settings: _FakeSettings(game.path),
+    );
+    await controller.initialize();
+
+    await controller.installOrUpdate();
+
+    expect(controller.status, LauncherStatus.completed);
+    expect(controller.translationIsCurrent, isTrue);
+  });
+
+  test('repair restores missing file and finishes verified', () async {
+    final manifest = testManifest(contents: contents);
+    final stage = await createStage(sandbox, manifest, contents);
+    await harness.installer.install(manifest, stage, game.path);
+    await File(
+      p.join(game.path, manifest.files.first.relativeDestination),
+    ).delete();
+    final controller = harness.controller(
+      manifest: manifest,
+      contents: contents,
+      settings: _FakeSettings(game.path),
+    );
+    await controller.initialize();
+    expect(controller.translationNeedsRepair, isTrue);
+
+    await controller.repairTranslation();
+
+    expect(controller.translationIsCurrent, isTrue);
+  });
+
+  test('removal finishes with a fresh not-installed verification', () async {
+    final manifest = testManifest(contents: contents);
+    final stage = await createStage(sandbox, manifest, contents);
+    await harness.installer.install(manifest, stage, game.path);
+    final controller = harness.controller(
+      manifest: manifest,
+      contents: contents,
+      settings: _FakeSettings(game.path),
+    );
+    await controller.initialize();
+
+    await controller.removeTranslation();
+
+    expect(
+      controller.verification.status,
+      TranslationInstallationStatus.notInstalled,
+    );
+  });
+
+  test(
+    'download blocks conflicting install, removal and launch clicks',
+    () async {
+      final downloads = _FakeDownloadService(paths, log, contents, pause: true);
+      final platform = _FakeGamePlatformService();
+      final controller = harness.controller(
+        manifest: testManifest(contents: contents),
+        contents: contents,
+        settings: _FakeSettings(game.path),
+        downloads: downloads,
+        gamePlatforms: platform,
+      );
+      await controller.initialize();
+
+      final installation = controller.installOrUpdate();
+      await downloads.started.future;
+      await controller.installOrUpdate();
+      await controller.removeTranslation();
+      await controller.launchGame();
+      expect(platform.launchCount, 0);
+      downloads.release.complete();
+      await installation;
+    },
+  );
+
+  test('UAC refusal is surfaced without recording a false install', () async {
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: _FakeSettings(game.path),
+      elevation: _FakeElevationService(log, refuse: true),
+    );
+    await controller.initialize();
+
+    await controller.installOrUpdate();
+
+    expect(controller.status, LauncherStatus.error);
+    expect(controller.translationIsCurrent, isFalse);
+    expect((await harness.receipts.read(game.path)).receipt, isNull);
+  });
+
+  test('--install mode revalidates disk before performing its write', () async {
+    final settings = _FakeSettings(game.path)..installedVersion = 'stale';
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: settings,
+      autoInstall: true,
+    );
+
+    await controller.initialize();
+
+    expect(controller.translationIsCurrent, isTrue);
+    expect(controller.status, LauncherStatus.completed);
+  });
 }
 
-class _FakeSettingsService implements LauncherSettings {
-  _FakeSettingsService(this.gameDirectory);
+class _Harness {
+  _Harness(this.paths, this.log) {
+    integrity = FileIntegrityService();
+    safePaths = SafePathService();
+    receipts = ReceiptRepository(paths, log, safePaths);
+    installer = InstallationService(
+      paths,
+      log,
+      integrity: integrity,
+      safePaths: safePaths,
+      receipts: receipts,
+    );
+  }
 
-  final String gameDirectory;
-  String? installedVersion = 'nte-auto-20260728-old';
+  final AppPaths paths;
+  final LauncherLog log;
+  late final FileIntegrityService integrity;
+  late final SafePathService safePaths;
+  late final ReceiptRepository receipts;
+  late final InstallationService installer;
+
+  LauncherController controller({
+    required TranslationManifest manifest,
+    required List<List<int>> contents,
+    required _FakeSettings settings,
+    TranslationVerificationService? verifier,
+    DownloadService? downloads,
+    ElevationService? elevation,
+    GamePlatformService? gamePlatforms,
+    bool autoInstall = false,
+  }) {
+    final actualVerifier =
+        verifier ??
+        TranslationVerificationService(
+          integrity: integrity,
+          receipts: receipts,
+          safePaths: safePaths,
+          log: log,
+        );
+    return LauncherController(
+      paths: paths,
+      log: log,
+      appUpdates: _FakeAppUpdateService(paths, log),
+      manifests: _FakeManifestRepository(paths, log, loaded(manifest)),
+      downloads: downloads ?? _FakeDownloadService(paths, log, contents),
+      elevation: elevation ?? _FakeElevationService(log),
+      gamePlatforms: gamePlatforms ?? _FakeGamePlatformService(),
+      installer: installer,
+      settings: settings,
+      verifier: actualVerifier,
+      migration: LegacyMigrationService(
+        paths: paths,
+        log: log,
+        integrity: integrity,
+        receipts: receipts,
+        safePaths: safePaths,
+      ),
+      autoInstall: autoInstall,
+    );
+  }
+}
+
+class _FakeSettings implements LauncherSettings {
+  _FakeSettings(this.gameDirectory);
+
+  String? gameDirectory;
+  String? installedVersion;
 
   @override
   Future<String?> getGameDirectory() async => gameDirectory;
-
+  @override
+  Future<void> setGameDirectory(String value) async => gameDirectory = value;
   @override
   Future<String?> getInstalledVersion() async => installedVersion;
-
   @override
-  Future<void> setInstalledVersion(String value) async {
-    installedVersion = value;
-  }
-
+  Future<void> setInstalledVersion(String value) async =>
+      installedVersion = value;
   @override
-  Future<void> setGameDirectory(String value) async {}
-
-  @override
-  Future<void> clearInstalledVersion() async {
-    installedVersion = null;
-  }
-
+  Future<void> clearInstalledVersion() async => installedVersion = null;
   @override
   Future<bool> getAutomaticLauncherUpdates() async => false;
-
   @override
   Future<void> setAutomaticLauncherUpdates(bool value) async {}
-
   @override
   Future<bool> getOfficialAutoplay() async => true;
-
   @override
   Future<void> setOfficialAutoplay(bool value) async {}
 }
 
 class _FakeManifestRepository extends ManifestRepository {
-  _FakeManifestRepository(super.paths, super.log, this.manifest);
-
-  final TranslationManifest manifest;
-
+  _FakeManifestRepository(super.paths, super.log, this.value);
+  final LoadedTranslationManifest value;
   @override
-  Future<TranslationManifest?> load() async => manifest;
+  Future<LoadedTranslationManifest?> load() async => value;
 }
 
 class _FakeDownloadService extends DownloadService {
-  _FakeDownloadService(super.paths, super.log, {this.pauseDownload = false});
+  _FakeDownloadService(
+    super.paths,
+    super.log,
+    this.contents, {
+    this.pause = false,
+  });
 
-  final bool pauseDownload;
-  final Completer<void> started = Completer<void>();
-  final Completer<void> _continue = Completer<void>();
+  final List<List<int>> contents;
+  final bool pause;
+  final started = Completer<void>();
+  final release = Completer<void>();
 
   @override
   Future<Directory> download(
@@ -191,68 +392,54 @@ class _FakeDownloadService extends DownloadService {
     if (!started.isCompleted) {
       started.complete();
     }
-    if (pauseDownload) {
-      await _continue.future;
+    if (pause) {
+      await release.future;
     }
-    final stage = Directory('${paths.root.path}/stage');
+    if (isCancelled()) {
+      throw const DownloadCancelledException();
+    }
+    final stage = Directory(
+      p.join(paths.root.path, 'fake-stage-${manifest.translationVersion}'),
+    );
     await stage.create(recursive: true);
-    onProgress(manifest.totalBytes, manifest.totalBytes, 'translation.pak');
-    return stage;
-  }
-
-  void release() {
-    if (!_continue.isCompleted) {
-      _continue.complete();
+    for (var index = 0; index < manifest.files.length; index++) {
+      await File(
+        p.join(stage.path, manifest.files[index].name),
+      ).writeAsBytes(contents[index]);
     }
-  }
-}
-
-class _FakeInstallationService extends InstallationService {
-  _FakeInstallationService(super.paths, super.log);
-
-  String? installedVersion;
-  int uninstallCount = 0;
-
-  @override
-  Future<bool> isValidGameDirectory(String path) async => true;
-
-  @override
-  Future<void> install(
-    TranslationManifest manifest,
-    Directory stage,
-    String gameDirectory,
-  ) async {
-    installedVersion = manifest.translationVersion;
-  }
-
-  @override
-  Future<void> uninstall() async {
-    uninstallCount++;
+    onProgress(
+      manifest.totalBytes,
+      manifest.totalBytes,
+      manifest.files.last.name,
+    );
+    return stage;
   }
 }
 
 class _FakeElevationService extends ElevationService {
-  _FakeElevationService(super.log);
-
+  _FakeElevationService(super.log, {this.refuse = false});
+  final bool refuse;
   @override
   Future<bool> ensureWritableOrRestart(
     String gameDirectory, {
     required bool allowRestart,
-  }) async => true;
+  }) async {
+    if (refuse) {
+      throw const ElevationException('UAC recusado.');
+    }
+    return true;
+  }
 }
 
 class _FakeGamePlatformService extends GamePlatformService {
   int launchCount = 0;
-
   @override
-  Future<GamePlatformInfo> detect(String gameDirectory) async {
-    return GamePlatformInfo(
-      platform: GamePlatform.official,
-      label: 'LAUNCHER OFICIAL',
-      launchTarget: '$gameDirectory/NTEGlobalLauncher.exe',
-    );
-  }
-
+  Future<GamePlatformInfo> detect(String gameDirectory) async =>
+      GamePlatformInfo(
+        platform: GamePlatform.official,
+        label: 'LAUNCHER OFICIAL',
+        launchTarget: p.join(gameDirectory, 'NTEGlobalLauncher.exe'),
+      );
   @override
   Future<void> launch(
     GamePlatformInfo info,
@@ -265,10 +452,55 @@ class _FakeGamePlatformService extends GamePlatformService {
 
 class _FakeAppUpdateService extends AppUpdateService {
   _FakeAppUpdateService(super.paths, super.log);
-
   @override
-  Future<String> currentVersion() async => '1.0.3';
-
+  Future<String> currentVersion() async => '1.0.4';
   @override
   Future<AppUpdateManifest?> check() async => null;
+}
+
+class _DelayedVerifier extends TranslationVerificationService {
+  _DelayedVerifier({
+    required super.integrity,
+    required super.receipts,
+    required super.safePaths,
+    required super.log,
+    required this.delayedDirectory,
+  });
+
+  final String delayedDirectory;
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<TranslationVerificationResult> verify({
+    required LoadedTranslationManifest loadedManifest,
+    required String gameDirectory,
+    VerificationProgress? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    if (gameDirectory == delayedDirectory) {
+      started.complete();
+      await release.future;
+    }
+    return super.verify(
+      loadedManifest: loadedManifest,
+      gameDirectory: gameDirectory,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    );
+  }
+}
+
+Future<void> _writeFiles(
+  Directory game,
+  TranslationManifest manifest,
+  List<List<int>> contents,
+) async {
+  for (var index = 0; index < manifest.files.length; index++) {
+    final file = File(
+      p.join(game.path, manifest.files[index].relativeDestination),
+    );
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(contents[index]);
+  }
 }
