@@ -6,20 +6,28 @@ import 'package:flutter/foundation.dart';
 import 'core/app_paths.dart';
 import 'core/launcher_log.dart';
 import 'models/app_update_manifest.dart';
+import 'models/loaded_translation_manifest.dart';
+import 'models/translation_installation.dart';
 import 'models/translation_manifest.dart';
 import 'services/app_update_service.dart';
 import 'services/download_service.dart';
 import 'services/elevation_service.dart';
 import 'services/game_platform_service.dart';
 import 'services/installation_service.dart';
+import 'services/legacy_migration_service.dart';
 import 'services/manifest_repository.dart';
 import 'services/settings_service.dart';
+import 'services/translation_verification_service.dart';
 
 enum LauncherStatus {
   starting,
+  loadingManifest,
+  verifying,
   ready,
   downloading,
   installing,
+  updating,
+  repairing,
   completed,
   removing,
   error,
@@ -36,6 +44,8 @@ class LauncherController extends ChangeNotifier {
     required this.gamePlatforms,
     required this.installer,
     required this.settings,
+    required this.verifier,
+    required this.migration,
     this.autoInstall = false,
   });
 
@@ -48,13 +58,17 @@ class LauncherController extends ChangeNotifier {
   final GamePlatformService gamePlatforms;
   final InstallationService installer;
   final LauncherSettings settings;
+  final TranslationVerificationService verifier;
+  final LegacyMigrationService migration;
   final bool autoInstall;
 
   LauncherStatus status = LauncherStatus.starting;
-  TranslationManifest? manifest;
+  LoadedTranslationManifest? loadedManifest;
   String? gameDirectory;
   GamePlatformInfo? gamePlatform;
-  String? installedVersion;
+  String? persistedInstalledVersion;
+  TranslationVerificationResult verification =
+      const TranslationVerificationResult.checking();
   String appVersion = '...';
   AppUpdateManifest? availableAppUpdate;
   bool checkingAppUpdate = false;
@@ -67,34 +81,71 @@ class LauncherController extends ChangeNotifier {
   String currentFile = '';
   int receivedBytes = 0;
   int totalBytes = 0;
+  int verifiedFiles = 0;
+  int verificationTotalFiles = 0;
   bool _cancelRequested = false;
+  int _operationGeneration = 0;
+  bool _disposed = false;
 
-  double get progress =>
-      totalBytes <= 0 ? 0 : (receivedBytes / totalBytes).clamp(0, 1);
+  TranslationManifest? get manifest => loadedManifest?.manifest;
+  ManifestSource? get manifestSource => loadedManifest?.source;
+  bool get offlineMode => loadedManifest?.isOffline ?? false;
+  String? get installedVersion =>
+      verification.detectedVersion ?? verification.receiptVersion;
+  double get progress {
+    if (status == LauncherStatus.verifying) {
+      return verificationTotalFiles <= 0
+          ? 0
+          : (verifiedFiles / verificationTotalFiles).clamp(0, 1);
+    }
+    return totalBytes <= 0 ? 0 : (receivedBytes / totalBytes).clamp(0, 1);
+  }
+
   bool get isBusy =>
       updatingLauncher ||
       status == LauncherStatus.starting ||
+      status == LauncherStatus.loadingManifest ||
+      status == LauncherStatus.verifying ||
       status == LauncherStatus.downloading ||
       status == LauncherStatus.installing ||
+      status == LauncherStatus.updating ||
+      status == LauncherStatus.repairing ||
       status == LauncherStatus.removing;
-  bool get canInstall => !isBusy && manifest != null && gameDirectory != null;
-  bool get isInstalled =>
-      installedVersion != null && installedVersion!.isNotEmpty;
+  bool get canChangeGameDirectory =>
+      !updatingLauncher &&
+      status != LauncherStatus.starting &&
+      status != LauncherStatus.loadingManifest &&
+      status != LauncherStatus.downloading &&
+      status != LauncherStatus.installing &&
+      status != LauncherStatus.updating &&
+      status != LauncherStatus.repairing &&
+      status != LauncherStatus.removing;
+  bool get isInstalled => verification.hasInstalledFiles;
   bool get translationIsCurrent =>
-      isInstalled &&
-      manifest != null &&
-      installedVersion == manifest!.translationVersion;
+      verification.status == TranslationInstallationStatus.installedCurrent;
   bool get translationUpdateAvailable =>
-      isInstalled &&
+      verification.status == TranslationInstallationStatus.installedOutdated;
+  bool get translationNeedsRepair =>
+      verification.needsRepair && verification.receiptVersion != null;
+  bool get hasUnmanagedChanges =>
+      verification.needsRepair && verification.receiptVersion == null;
+  bool get canInstall =>
+      !isBusy &&
       manifest != null &&
-      installedVersion != manifest!.translationVersion;
+      gameDirectory != null &&
+      !hasUnmanagedChanges &&
+      verification.status != TranslationInstallationStatus.unverifiable;
+  bool get canRemove =>
+      !isBusy && gameDirectory != null && verification.receiptVersion != null;
 
   Future<void> initialize() async {
+    final operation = ++_operationGeneration;
     status = LauncherStatus.starting;
-    notifyListeners();
+    verification = const TranslationVerificationResult.checking();
+    _notify();
     try {
       gameDirectory = await settings.getGameDirectory();
-      installedVersion = await settings.getInstalledVersion();
+      persistedInstalledVersion = await settings.getInstalledVersion();
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
       officialAutoplay = await settings.getOfficialAutoplay();
       if (gameDirectory == null ||
@@ -104,177 +155,377 @@ class LauncherController extends ChangeNotifier {
             ? defaultPath
             : null;
       }
-      if (gameDirectory != null) {
-        await _detectGamePlatform();
+      if (!_isCurrent(operation)) {
+        return;
       }
-      await _removeLegacyTranslationIfPresent();
-      manifest = await manifests.load();
+      if (gameDirectory != null) {
+        await _detectGamePlatform(operation);
+      }
+
+      status = LauncherStatus.loadingManifest;
+      _notify();
+      loadedManifest = await manifests.load();
+      if (!_isCurrent(operation)) {
+        return;
+      }
       totalBytes = manifest?.totalBytes ?? 0;
-      await log.info('Launcher inicializado.');
+      if (loadedManifest != null && gameDirectory != null) {
+        final recovery = await installer.recoverAbandoned(
+          gameDirectory!,
+          manifest!,
+        );
+        if (!recovery.complete) {
+          verification = TranslationVerificationResult(
+            status: TranslationInstallationStatus.unverifiable,
+            error:
+                'Operação abandonada requer diagnóstico: '
+                '${recovery.unresolvedPaths.join(', ')}',
+          );
+        } else {
+          await migration.migrateWhenProvable(
+            gameDirectory: gameDirectory!,
+            loadedManifest: loadedManifest!,
+          );
+          await _verifyCurrent(operation);
+        }
+      } else {
+        verification = const TranslationVerificationResult(
+          status: TranslationInstallationStatus.notInstalled,
+        );
+      }
+      if (!_isCurrent(operation)) {
+        return;
+      }
+
       await checkLauncherUpdates();
+      if (!_isCurrent(operation)) {
+        return;
+      }
       if (automaticLauncherUpdates && availableAppUpdate != null) {
         await installLauncherUpdate();
         return;
       }
       status = LauncherStatus.ready;
-      if (autoInstall && gameDirectory != null) {
-        await installOrUpdate();
+      await log.info(
+        'Launcher inicializado; estado da tradução: '
+        '${verification.status.name}.',
+      );
+      _notify();
+
+      if (autoInstall && gameDirectory != null && _requiresWriteOperation) {
+        await installOrUpdate(repair: translationNeedsRepair);
         return;
       }
-      if (translationUpdateAvailable && gameDirectory != null) {
+      if (translationUpdateAvailable &&
+          loadedManifest?.isAuthoritative == true &&
+          gameDirectory != null) {
         await log.info(
-          'Atualização automática da tradução: '
+          'Atualização automática comprovada: '
           '$installedVersion -> ${manifest!.translationVersion}.',
         );
         await installOrUpdate();
-        return;
       }
     } catch (error, stackTrace) {
-      await _setError(
-        'Não foi possível iniciar o launcher.',
-        error,
-        stackTrace,
-      );
+      if (_isCurrent(operation)) {
+        await _setError(
+          'Não foi possível iniciar o launcher.',
+          error,
+          stackTrace,
+        );
+      }
     }
-    notifyListeners();
+    _notify();
   }
 
-  Future<void> _removeLegacyTranslationIfPresent() async {
-    final version = installedVersion;
-    if (version == null || version.isEmpty || version.startsWith('nte-auto-')) {
-      return;
-    }
-    if (await installer.hasReceipt()) {
-      await installer.uninstall();
-      await log.info(
-        'Pacote legado $version removido antes da migração automática.',
-      );
-    } else {
-      await log.info(
-        'Registro legado $version descartado; não havia recibo de instalação.',
-      );
-    }
-    await settings.clearInstalledVersion();
-    installedVersion = null;
-  }
+  bool get _requiresWriteOperation =>
+      verification.status == TranslationInstallationStatus.notInstalled ||
+      verification.status == TranslationInstallationStatus.installedOutdated ||
+      translationNeedsRepair;
 
   Future<void> chooseGameDirectory() async {
-    if (isBusy) {
+    if (!canChangeGameDirectory) {
       return;
     }
     final selected = await FilePicker.getDirectoryPath(
       dialogTitle: 'Selecione a pasta principal de Neverness To Everness',
     );
-    if (selected == null) {
+    if (selected != null) {
+      await selectGameDirectory(selected);
+    }
+  }
+
+  Future<void> selectGameDirectory(String selected) async {
+    if (!canChangeGameDirectory) {
       return;
     }
+    final operation = ++_operationGeneration;
+    verification = const TranslationVerificationResult.checking();
+    gamePlatform = null;
+    errorMessage = null;
+    status = LauncherStatus.verifying;
+    _notify();
     if (!await installer.isValidGameDirectory(selected)) {
-      errorMessage = 'A pasta selecionada não contém NTEGlobalLauncher.exe.';
-      status = LauncherStatus.error;
-      notifyListeners();
+      if (_isCurrent(operation)) {
+        errorMessage = 'A pasta selecionada não contém NTEGlobalLauncher.exe.';
+        verification = const TranslationVerificationResult(
+          status: TranslationInstallationStatus.unverifiable,
+        );
+        status = LauncherStatus.error;
+        _notify();
+      }
       return;
     }
     gameDirectory = selected;
-    await _detectGamePlatform();
     await settings.setGameDirectory(selected);
-    errorMessage = null;
-    status = LauncherStatus.ready;
-    notifyListeners();
+    await _detectGamePlatform(operation);
+    if (loadedManifest != null && _isCurrent(operation)) {
+      await _verifyCurrent(operation);
+    }
+    if (_isCurrent(operation)) {
+      status = LauncherStatus.ready;
+      _notify();
+    }
   }
 
-  Future<void> installOrUpdate() async {
+  Future<void> verifyAgain() async {
+    if (isBusy || gameDirectory == null || loadedManifest == null) {
+      return;
+    }
+    final operation = ++_operationGeneration;
+    await _verifyCurrent(operation);
+    if (_isCurrent(operation)) {
+      status = LauncherStatus.ready;
+      _notify();
+    }
+  }
+
+  Future<void> _verifyCurrent(int operation) async {
+    final directory = gameDirectory;
+    final loaded = loadedManifest;
+    if (directory == null || loaded == null) {
+      return;
+    }
+    final directorySnapshot = directory;
+    final manifestSnapshot = loaded;
+    status = LauncherStatus.verifying;
+    verification = const TranslationVerificationResult.checking();
+    verifiedFiles = 0;
+    verificationTotalFiles = loaded.manifest.files.length;
+    currentFile = '';
+    _notify();
+    final result = await verifier.verify(
+      loadedManifest: manifestSnapshot,
+      gameDirectory: directorySnapshot,
+      isCancelled: () =>
+          !_isCurrent(operation) ||
+          gameDirectory != directorySnapshot ||
+          loadedManifest != manifestSnapshot,
+      onProgress: (file, verified, total) {
+        if (!_isCurrent(operation) ||
+            gameDirectory != directorySnapshot ||
+            loadedManifest != manifestSnapshot) {
+          return;
+        }
+        currentFile = file;
+        verifiedFiles = verified;
+        verificationTotalFiles = total;
+        _notify();
+      },
+    );
+    if (!_isCurrent(operation) ||
+        gameDirectory != directorySnapshot ||
+        loadedManifest != manifestSnapshot) {
+      return;
+    }
+    verification = result;
+    currentFile = '';
+    if (result.status == TranslationInstallationStatus.notInstalled &&
+        persistedInstalledVersion != null) {
+      await log.info(
+        'Versão persistida $persistedInstalledVersion não foi confirmada '
+        'pelo disco e será descartada.',
+      );
+      await settings.clearInstalledVersion();
+      persistedInstalledVersion = null;
+    } else if (result.isVerified && result.detectedVersion != null) {
+      persistedInstalledVersion = result.detectedVersion;
+      await settings.setInstalledVersion(result.detectedVersion!);
+    }
+    await log.info(
+      'Verificação concluída: ${result.status.name}; '
+      '${result.validFiles.length} válidos, '
+      '${result.missingFiles.length} ausentes, '
+      '${result.modifiedFiles.length} modificados.',
+    );
+  }
+
+  Future<void> installOrUpdate({bool repair = false}) async {
     final selectedManifest = manifest;
     final selectedGameDirectory = gameDirectory;
-    if (selectedManifest == null || selectedGameDirectory == null || isBusy) {
+    final selectedLoadedManifest = loadedManifest;
+    if (selectedManifest == null ||
+        selectedLoadedManifest == null ||
+        selectedGameDirectory == null ||
+        isBusy ||
+        hasUnmanagedChanges) {
+      return;
+    }
+    if (translationUpdateAvailable && !selectedLoadedManifest.isAuthoritative) {
+      await _setError(
+        'Atualização bloqueada.',
+        const InstallationException(
+          'Um manifesto offline não pode provocar atualização ou downgrade.',
+        ),
+        StackTrace.current,
+      );
+      _notify();
       return;
     }
 
+    final operation = ++_operationGeneration;
     _cancelRequested = false;
     errorMessage = null;
     currentFile = '';
     receivedBytes = 0;
     totalBytes = selectedManifest.totalBytes;
     status = LauncherStatus.downloading;
-    notifyListeners();
+    _notify();
 
     try {
       final stage = await downloads.download(
         selectedManifest,
         onProgress: (received, total, file) {
+          if (!_isCurrent(operation)) {
+            return;
+          }
           receivedBytes = received;
           totalBytes = total;
           currentFile = file;
-          notifyListeners();
+          _notify();
         },
-        isCancelled: () => _cancelRequested,
+        isCancelled: () => _cancelRequested || !_isCurrent(operation),
       );
-      if (_cancelRequested) {
+      if (_cancelRequested || !_isCurrent(operation)) {
         throw const DownloadCancelledException();
       }
 
-      status = LauncherStatus.installing;
-      currentFile = 'Aplicando arquivos com segurança';
-      notifyListeners();
+      status = repair
+          ? LauncherStatus.repairing
+          : translationUpdateAvailable
+          ? LauncherStatus.updating
+          : LauncherStatus.installing;
+      currentFile = repair
+          ? 'Reparando arquivos com segurança'
+          : 'Aplicando arquivos com segurança';
+      _notify();
       await elevation.ensureWritableOrRestart(
         selectedGameDirectory,
         allowRestart: !autoInstall,
       );
+      if (!_isCurrent(operation) ||
+          gameDirectory != selectedGameDirectory ||
+          loadedManifest != selectedLoadedManifest) {
+        throw const InstallationException(
+          'O diretório ou o manifesto mudou durante a operação.',
+        );
+      }
       await installer.install(selectedManifest, stage, selectedGameDirectory);
+      persistedInstalledVersion = selectedManifest.translationVersion;
       await settings.setInstalledVersion(selectedManifest.translationVersion);
-      installedVersion = selectedManifest.translationVersion;
+      await _verifyCurrent(operation);
+      if (!translationIsCurrent) {
+        throw InstallationException(
+          'A validação pós-instalação retornou '
+          '${verification.status.name}.',
+        );
+      }
       receivedBytes = totalBytes;
       currentFile = '';
       status = LauncherStatus.completed;
       await log.info(
-        'Operação concluída para ${selectedManifest.translationVersion}.',
+        'Operação concluída e verificada para '
+        '${selectedManifest.translationVersion}.',
       );
     } on DownloadCancelledException {
-      status = LauncherStatus.ready;
-      currentFile = '';
-      await log.info('Download cancelado pelo usuário.');
+      if (_isCurrent(operation)) {
+        status = LauncherStatus.ready;
+        currentFile = '';
+        await log.info('Download cancelado pelo usuário.');
+      }
     } catch (error, stackTrace) {
-      await _setError(
-        'Não foi possível instalar a tradução.',
-        error,
-        stackTrace,
-      );
+      if (_isCurrent(operation)) {
+        await _setError(
+          repair
+              ? 'Não foi possível reparar a tradução.'
+              : 'Não foi possível instalar a tradução.',
+          error,
+          stackTrace,
+        );
+      }
     }
-    notifyListeners();
+    _notify();
   }
+
+  Future<void> repairTranslation() => installOrUpdate(repair: true);
 
   void cancelDownload() {
     if (status == LauncherStatus.downloading) {
       _cancelRequested = true;
       currentFile = 'Cancelando...';
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> removeTranslation() async {
-    if (isBusy || !isInstalled) {
+    final directory = gameDirectory;
+    if (isBusy || !canRemove || directory == null) {
       return;
     }
+    final operation = ++_operationGeneration;
     status = LauncherStatus.removing;
     errorMessage = null;
-    notifyListeners();
+    _notify();
     try {
-      await installer.uninstall();
+      final result = await installer.uninstall(directory);
+      if (!result.complete) {
+        throw InstallationException(
+          'Remoção parcial. Arquivos modificados preservados: '
+          '${result.preservedModifiedFiles.length}; falhas: '
+          '${result.failedFiles.length}. Recibo e backups foram mantidos.',
+        );
+      }
       await settings.clearInstalledVersion();
-      installedVersion = null;
+      persistedInstalledVersion = null;
+      await _verifyCurrent(operation);
       status = LauncherStatus.ready;
     } catch (error, stackTrace) {
+      await _verifyCurrent(operation);
       await _setError(
-        'Não foi possível remover a tradução.',
+        'Não foi possível remover completamente a tradução.',
         error,
         stackTrace,
       );
     }
-    notifyListeners();
+    _notify();
   }
 
-  Future<void> launchGame() async {
+  Future<void> launchGame({bool allowInvalidTranslation = false}) async {
     final directory = gameDirectory;
-    if (directory == null || isBusy || translationUpdateAvailable) {
+    if (directory == null || isBusy) {
+      return;
+    }
+    final invalid =
+        verification.status == TranslationInstallationStatus.incomplete ||
+        verification.status == TranslationInstallationStatus.modified ||
+        verification.status == TranslationInstallationStatus.unverifiable ||
+        verification.status ==
+            TranslationInstallationStatus.incompatibleGameBuild;
+    if (invalid && !allowInvalidTranslation) {
+      errorMessage =
+          'A tradução não está íntegra. Repare ou remova a tradução antes '
+          'de jogar; você também pode confirmar a abertura por sua conta.';
+      status = LauncherStatus.error;
+      _notify();
       return;
     }
     try {
@@ -291,7 +542,7 @@ class LauncherController extends ChangeNotifier {
       exit(0);
     } catch (error, stackTrace) {
       await _setError('Não foi possível abrir o jogo.', error, stackTrace);
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -300,7 +551,7 @@ class LauncherController extends ChangeNotifier {
       return;
     }
     checkingAppUpdate = true;
-    notifyListeners();
+    _notify();
     try {
       appVersion = await appUpdates.currentVersion();
       availableAppUpdate = await appUpdates.check();
@@ -312,20 +563,20 @@ class LauncherController extends ChangeNotifier {
       );
     } finally {
       checkingAppUpdate = false;
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> setAutomaticLauncherUpdates(bool value) async {
     automaticLauncherUpdates = value;
     await settings.setAutomaticLauncherUpdates(value);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> setOfficialAutoplay(bool value) async {
     officialAutoplay = value;
     await settings.setOfficialAutoplay(value);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> installLauncherUpdate() async {
@@ -337,14 +588,14 @@ class LauncherController extends ChangeNotifier {
     appUpdateReceivedBytes = 0;
     appUpdateTotalBytes = update.installerSize;
     errorMessage = null;
-    notifyListeners();
+    _notify();
     try {
       final installer = await appUpdates.downloadInstaller(
         update,
         onProgress: (received, total) {
           appUpdateReceivedBytes = received;
           appUpdateTotalBytes = total;
-          notifyListeners();
+          _notify();
         },
       );
       await appUpdates.startInstaller(installer);
@@ -360,24 +611,27 @@ class LauncherController extends ChangeNotifier {
         error,
         stackTrace,
       );
-      notifyListeners();
+      _notify();
     }
   }
 
-  Future<void> _detectGamePlatform() async {
+  Future<void> _detectGamePlatform(int operation) async {
     final directory = gameDirectory;
     if (directory == null) {
       gamePlatform = null;
       return;
     }
-    gamePlatform = await gamePlatforms.detect(directory);
-    await log.info('Plataforma detectada: ${gamePlatform!.label}.');
+    final detected = await gamePlatforms.detect(directory);
+    if (_isCurrent(operation) && gameDirectory == directory) {
+      gamePlatform = detected;
+      await log.info('Plataforma detectada: ${detected.label}.');
+    }
   }
 
   void clearError() {
     errorMessage = null;
     status = LauncherStatus.ready;
-    notifyListeners();
+    _notify();
   }
 
   Future<void> _setError(
@@ -401,5 +655,21 @@ class LauncherController extends ChangeNotifier {
       return error.message;
     }
     return error.toString();
+  }
+
+  bool _isCurrent(int operation) =>
+      !_disposed && operation == _operationGeneration;
+
+  void _notify() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _operationGeneration++;
+    super.dispose();
   }
 }

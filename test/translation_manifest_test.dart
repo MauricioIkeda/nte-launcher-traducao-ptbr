@@ -64,4 +64,25 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('accepts optional future game-build metadata', () {
+    final manifest = TranslationManifest.fromJson({
+      'schemaVersion': 1,
+      'translationVersion': '1.0.0',
+      'publishedAt': '2026-07-27T00:00:00Z',
+      'gameBuildId': 'nte-build-42',
+      'sourceHash': validHash,
+      'files': [
+        {
+          'name': 'translation.pak',
+          'relativeDestination': 'Client/Content/Paks/translation.pak',
+          'url': 'https://example.com/translation.pak',
+          'size': 42,
+          'sha256': validHash,
+        },
+      ],
+    });
+    expect(manifest.gameBuildId, 'nte-build-42');
+    expect(manifest.sourceHash, validHash);
+  });
 }

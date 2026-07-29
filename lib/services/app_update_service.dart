@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/app_paths.dart';
 import '../core/launcher_log.dart';
 import '../core/trusted_http_client.dart';
 import '../models/app_update_manifest.dart';
+import 'file_integrity_service.dart';
 
 typedef UpdateProgress = void Function(int received, int total);
 
@@ -17,8 +17,10 @@ class AppUpdateService {
     this.log, {
     String? manifestUrl,
     String? currentVersion,
+    FileIntegrityService? integrity,
   }) : _manifestUrl = manifestUrl ?? _defaultManifestUrl,
-       _currentVersionOverride = currentVersion;
+       _currentVersionOverride = currentVersion,
+       integrity = integrity ?? FileIntegrityService();
 
   static const _defaultManifestUrl = String.fromEnvironment(
     'NTE_LAUNCHER_MANIFEST_URL',
@@ -32,6 +34,7 @@ class AppUpdateService {
   final LauncherLog log;
   final String _manifestUrl;
   final String? _currentVersionOverride;
+  final FileIntegrityService integrity;
 
   Future<String> currentVersion() async {
     return _currentVersionOverride ??
@@ -42,7 +45,16 @@ class AppUpdateService {
     final current = await currentVersion();
     final client = TrustedHttpClientFactory.create();
     try {
-      final uri = Uri.parse(_manifestUrl);
+      final baseUri = Uri.parse(_manifestUrl);
+      final uri = baseUri.replace(
+        queryParameters: {
+          ...baseUri.queryParameters,
+          '_nte_cache_bust': DateTime.now()
+              .toUtc()
+              .microsecondsSinceEpoch
+              .toString(),
+        },
+      );
       if (uri.scheme != 'https') {
         throw const FormatException(
           'O manifesto do launcher precisa usar HTTPS.',
@@ -50,6 +62,8 @@ class AppUpdateService {
       }
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+      request.headers.set('Pragma', 'no-cache');
       final response = await request.close().timeout(
         const Duration(seconds: 20),
       );
@@ -138,15 +152,18 @@ class AppUpdateService {
     File installer,
     AppUpdateManifest manifest,
   ) async {
-    final size = await installer.length();
-    if (size != manifest.installerSize) {
+    final result = await integrity.startOperation().verify(
+      file: installer,
+      expectedSize: manifest.installerSize,
+      expectedSha256: manifest.installerSha256,
+    );
+    if (result.status == FileIntegrityStatus.sizeMismatch) {
       throw AppUpdateException(
-        'O instalador possui $size bytes; '
+        'O instalador possui ${result.actualSize} bytes; '
         'eram esperados ${manifest.installerSize}.',
       );
     }
-    final digest = await sha256.bind(installer.openRead()).first;
-    if (digest.toString() != manifest.installerSha256) {
+    if (!result.isValid) {
       throw const AppUpdateException(
         'O SHA-256 do instalador não corresponde ao manifesto.',
       );

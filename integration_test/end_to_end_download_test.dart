@@ -71,9 +71,12 @@ void main() {
       await versionDll.writeAsBytes(originalContents);
 
       await installer.install(manifest, stage, game.path);
-      expect(await versionDll.length(), 3577160);
+      final versionAsset = manifest.files.singleWhere(
+        (file) => file.name == 'version.dll',
+      );
+      expect(await versionDll.length(), versionAsset.size);
 
-      await installer.uninstall();
+      await installer.uninstall(game.path);
       expect(await versionDll.readAsBytes(), originalContents);
 
       for (final asset in manifest.files.where(

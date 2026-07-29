@@ -4,12 +4,16 @@ class TranslationManifest {
     required this.translationVersion,
     required this.publishedAt,
     required this.files,
+    this.gameBuildId,
+    this.sourceHash,
   });
 
   final int schemaVersion;
   final String translationVersion;
   final DateTime publishedAt;
   final List<TranslationFile> files;
+  final String? gameBuildId;
+  final String? sourceHash;
 
   int get totalBytes => files.fold(0, (total, file) => total + file.size);
 
@@ -18,6 +22,8 @@ class TranslationManifest {
       schemaVersion: json['schemaVersion'] as int,
       translationVersion: json['translationVersion'] as String,
       publishedAt: DateTime.parse(json['publishedAt'] as String).toUtc(),
+      gameBuildId: _optionalNonEmptyString(json['gameBuildId']),
+      sourceHash: _optionalSha256(json['sourceHash']),
       files: (json['files'] as List<dynamic>)
           .map(
             (value) => TranslationFile.fromJson(value as Map<String, dynamic>),
@@ -44,6 +50,27 @@ class TranslationManifest {
         throw const FormatException('Arquivo duplicado no manifesto.');
       }
     }
+  }
+
+  static String? _optionalNonEmptyString(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is! String || value.trim().isEmpty) {
+      throw const FormatException('Identificador de build inválido.');
+    }
+    return value.trim();
+  }
+
+  static String? _optionalSha256(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    final normalized = value.toString().toLowerCase();
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(normalized)) {
+      throw const FormatException('Hash de fonte inválido.');
+    }
+    return normalized;
   }
 }
 

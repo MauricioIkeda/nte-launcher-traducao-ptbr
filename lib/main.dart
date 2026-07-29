@@ -7,13 +7,20 @@ import 'core/app_paths.dart';
 import 'core/launcher_log.dart';
 import 'core/trusted_http_client.dart';
 import 'launcher_controller.dart';
+import 'models/loaded_translation_manifest.dart';
+import 'models/translation_installation.dart';
+import 'services/file_integrity_service.dart';
 import 'services/app_update_service.dart';
 import 'services/download_service.dart';
 import 'services/elevation_service.dart';
 import 'services/game_platform_service.dart';
 import 'services/installation_service.dart';
+import 'services/legacy_migration_service.dart';
 import 'services/manifest_repository.dart';
+import 'services/receipt_repository.dart';
+import 'services/safe_path_service.dart';
 import 'services/settings_service.dart';
+import 'services/translation_verification_service.dart';
 
 const _cyan = Color(0xFF35D8F1);
 const _coral = Color(0xFFFF4F86);
@@ -27,16 +34,40 @@ Future<void> main(List<String> arguments) async {
   await TrustedHttpClientFactory.initialize();
   final paths = await AppPaths.create();
   final log = LauncherLog(paths.logFile);
+  final integrity = FileIntegrityService();
+  final safePaths = SafePathService();
+  final receipts = ReceiptRepository(paths, log, safePaths);
+  final installer = InstallationService(
+    paths,
+    log,
+    integrity: integrity,
+    safePaths: safePaths,
+    receipts: receipts,
+  );
+  final verifier = TranslationVerificationService(
+    integrity: integrity,
+    receipts: receipts,
+    safePaths: safePaths,
+    log: log,
+  );
   final controller = LauncherController(
     paths: paths,
     log: log,
     appUpdates: AppUpdateService(paths, log),
     manifests: ManifestRepository(paths, log),
-    downloads: DownloadService(paths, log),
+    downloads: DownloadService(paths, log, integrity: integrity),
     elevation: ElevationService(log),
     gamePlatforms: GamePlatformService(),
-    installer: InstallationService(paths, log),
+    installer: installer,
     settings: SettingsService(),
+    verifier: verifier,
+    migration: LegacyMigrationService(
+      paths: paths,
+      log: log,
+      integrity: integrity,
+      receipts: receipts,
+      safePaths: safePaths,
+    ),
     autoInstall: arguments.contains('--install'),
   );
   runApp(NteLauncherApp(controller: controller));
@@ -300,9 +331,12 @@ class _LiveStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final online =
-        controller.manifest != null &&
-        controller.status != LauncherStatus.error;
+    final online = controller.manifestSource == ManifestSource.remote;
+    final label = controller.manifest == null
+        ? 'CONECTANDO'
+        : online
+        ? 'SERVIÇO ONLINE'
+        : 'MODO OFFLINE';
     return _GlassSurface(
       radius: 99,
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
@@ -325,7 +359,7 @@ class _LiveStatus extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            online ? 'SERVIÇO ONLINE' : 'CONECTANDO',
+            label,
             style: const TextStyle(
               color: Color(0xFFD8E3EF),
               fontSize: 9,
@@ -407,25 +441,62 @@ class _UpdatePanel extends StatelessWidget {
     final manifest = controller.manifest;
     final availableVersion = manifest?.translationVersion;
     final translationIsCurrent = controller.translationIsCurrent;
+    final installationStatus = controller.verification.status;
+    final invalidTranslation =
+        installationStatus == TranslationInstallationStatus.incomplete ||
+        installationStatus == TranslationInstallationStatus.modified ||
+        installationStatus == TranslationInstallationStatus.unverifiable ||
+        installationStatus ==
+            TranslationInstallationStatus.incompatibleGameBuild;
     final actionLabel = manifest == null
         ? 'AGUARDANDO PRIMEIRA TRADUÇÃO'
+        : installationStatus == TranslationInstallationStatus.checking
+        ? 'VERIFICANDO TRADUÇÃO'
+        : controller.hasUnmanagedChanges
+        ? 'ARQUIVOS NÃO GERENCIADOS'
+        : controller.translationNeedsRepair
+        ? 'REPARAR TRADUÇÃO'
+        : controller.translationUpdateAvailable
+        ? 'ATUALIZAR TRADUÇÃO  •  v${availableVersion ?? '...'}'
+        : installationStatus == TranslationInstallationStatus.unverifiable ||
+              installationStatus ==
+                  TranslationInstallationStatus.incompatibleGameBuild
+        ? 'VERIFICAR NOVAMENTE'
         : !controller.isInstalled
         ? 'INSTALAR TRADUÇÃO'
         : translationIsCurrent
         ? 'JOGAR AGORA  •  ${controller.gamePlatform?.label.toUpperCase() ?? 'NTE'}'
-        : 'ATUALIZAR TRADUÇÃO  •  v${availableVersion ?? '...'}';
+        : 'INSTALAR TRADUÇÃO';
     final actionIcon = manifest == null
         ? Icons.hourglass_top_rounded
+        : controller.hasUnmanagedChanges
+        ? Icons.gpp_maybe_outlined
+        : controller.translationNeedsRepair
+        ? Icons.build_circle_outlined
+        : installationStatus == TranslationInstallationStatus.unverifiable
+        ? Icons.refresh_rounded
         : translationIsCurrent
         ? Icons.play_arrow_rounded
         : Icons.download_done_rounded;
     final actionEnabled = manifest == null
         ? false
+        : controller.hasUnmanagedChanges
+        ? false
+        : installationStatus == TranslationInstallationStatus.unverifiable ||
+              installationStatus ==
+                  TranslationInstallationStatus.incompatibleGameBuild
+        ? !controller.isBusy && controller.gameDirectory != null
         : translationIsCurrent
         ? controller.gameDirectory != null && !controller.isBusy
         : controller.canInstall;
     final VoidCallback? action = manifest == null
         ? null
+        : installationStatus == TranslationInstallationStatus.unverifiable ||
+              installationStatus ==
+                  TranslationInstallationStatus.incompatibleGameBuild
+        ? () => controller.verifyAgain()
+        : controller.translationNeedsRepair
+        ? () => controller.repairTranslation()
         : translationIsCurrent
         ? () => controller.launchGame()
         : () => controller.installOrUpdate();
@@ -464,9 +535,7 @@ class _UpdatePanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      controller.isInstalled
-                          ? 'Instalada no seu jogo e pronta para usar'
-                          : 'Localize o jogo e instale o pacote de idioma',
+                      _installationDescription(controller),
                       style: const TextStyle(color: _muted, fontSize: 10),
                     ),
                   ],
@@ -482,10 +551,18 @@ class _UpdatePanel extends StatelessWidget {
                         : 'PACOTE v${manifest.translationVersion}',
                   ),
                   const SizedBox(height: 7),
-                  _InstallStateTag(
-                    installed: controller.isInstalled,
-                    current: translationIsCurrent,
-                  ),
+                  _InstallStateTag(controller: controller),
+                  if (controller.offlineMode) ...[
+                    const SizedBox(height: 5),
+                    const Text(
+                      'MANIFESTO OFFLINE',
+                      style: TextStyle(
+                        color: _yellow,
+                        fontSize: 7,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -521,7 +598,32 @@ class _UpdatePanel extends StatelessWidget {
                   ),
                 )
               else ...[
-                if (controller.isInstalled) ...[
+                if (invalidTranslation &&
+                    !controller.canRemove &&
+                    controller.gameDirectory != null) ...[
+                  SizedBox(
+                    width: 165,
+                    child: _SecondaryButton(
+                      label: 'JOGAR ASSIM MESMO',
+                      icon: Icons.warning_amber_rounded,
+                      onPressed: controller.isBusy
+                          ? null
+                          : () async {
+                              final confirmed =
+                                  await _confirmInvalidTranslationLaunch(
+                                    context,
+                                  );
+                              if (confirmed) {
+                                await controller.launchGame(
+                                  allowInvalidTranslation: true,
+                                );
+                              }
+                            },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                if (controller.canRemove) ...[
                   SizedBox(
                     width: 170,
                     child: _SecondaryButton(
@@ -552,18 +654,59 @@ class _UpdatePanel extends StatelessWidget {
 }
 
 class _InstallStateTag extends StatelessWidget {
-  const _InstallStateTag({required this.installed, required this.current});
+  const _InstallStateTag({required this.controller});
 
-  final bool installed;
-  final bool current;
+  final LauncherController controller;
 
   @override
   Widget build(BuildContext context) {
-    final (label, color, icon) = !installed
-        ? ('NÃO INSTALADA', _yellow, Icons.download_outlined)
-        : current
-        ? ('ATUALIZADA', _green, Icons.check_circle_outline_rounded)
-        : ('ATUALIZAÇÃO DISPONÍVEL', _yellow, Icons.update_rounded);
+    final (label, color, icon) = switch (controller.verification.status) {
+      TranslationInstallationStatus.checking => (
+        'VERIFICANDO',
+        _cyan,
+        Icons.sync_rounded,
+      ),
+      TranslationInstallationStatus.notInstalled => (
+        'NÃO INSTALADA',
+        _yellow,
+        Icons.download_outlined,
+      ),
+      TranslationInstallationStatus.installedCurrent => (
+        'INSTALADA E VERIFICADA',
+        _green,
+        Icons.verified_outlined,
+      ),
+      TranslationInstallationStatus.installedOutdated => (
+        'ATUALIZAÇÃO DISPONÍVEL',
+        _yellow,
+        Icons.update_rounded,
+      ),
+      TranslationInstallationStatus.incomplete => (
+        'TRADUÇÃO INCOMPLETA',
+        _coral,
+        Icons.warning_amber_rounded,
+      ),
+      TranslationInstallationStatus.modified => (
+        'TRADUÇÃO MODIFICADA',
+        _coral,
+        Icons.edit_note_rounded,
+      ),
+      TranslationInstallationStatus.managedInAnotherDirectory => (
+        'GERENCIADA EM OUTRA PASTA',
+        _yellow,
+        Icons.folder_off_outlined,
+      ),
+      TranslationInstallationStatus.incompatibleGameBuild => (
+        'POSSÍVEL INCOMPATIBILIDADE',
+        _coral,
+        Icons.report_problem_outlined,
+      ),
+      TranslationInstallationStatus.unverifiable => (
+        'FALHA DE VERIFICAÇÃO',
+        _coral,
+        Icons.error_outline_rounded,
+      ),
+    };
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -975,7 +1118,9 @@ class _FolderField extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: controller.isBusy ? null : controller.chooseGameDirectory,
+        onTap: controller.canChangeGameDirectory
+            ? controller.chooseGameDirectory
+            : null,
         borderRadius: BorderRadius.circular(10),
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
@@ -1141,8 +1286,13 @@ class _ProgressArea extends StatelessWidget {
   Widget build(BuildContext context) {
     final progressLabel = switch (controller.status) {
       LauncherStatus.starting => 'CONECTANDO',
+      LauncherStatus.loadingManifest => 'CARREGANDO',
+      LauncherStatus.verifying =>
+        '${controller.verifiedFiles}/${controller.verificationTotalFiles}',
       LauncherStatus.downloading ||
       LauncherStatus.installing ||
+      LauncherStatus.updating ||
+      LauncherStatus.repairing ||
       LauncherStatus.removing =>
         '${(controller.progress * 100).toStringAsFixed(0)}%',
       LauncherStatus.completed => 'CONCLUÍDO',
@@ -1186,7 +1336,9 @@ class _ProgressArea extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(99),
           child: LinearProgressIndicator(
-            value: controller.status == LauncherStatus.starting
+            value:
+                controller.status == LauncherStatus.starting ||
+                    controller.status == LauncherStatus.loadingManifest
                 ? null
                 : controller.progress,
             minHeight: 4,
@@ -1574,6 +1726,31 @@ Future<void> _openGitHubProfile(BuildContext context, String url) async {
   }
 }
 
+Future<bool> _confirmInvalidTranslationLaunch(BuildContext context) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('A tradução não está íntegra'),
+          content: const Text(
+            'Existem arquivos ausentes, modificados ou que não puderam ser '
+            'verificados. O jogo pode exibir textos incorretos ou falhar. '
+            'Reparar ou remover a tradução é a opção segura.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('CANCELAR'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('ABRIR POR MINHA CONTA'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}
+
 class _GlassSurface extends StatelessWidget {
   const _GlassSurface({
     required this.child,
@@ -1675,15 +1852,49 @@ class _TopAction extends StatelessWidget {
   }
 }
 
+String _installationDescription(LauncherController controller) {
+  return switch (controller.verification.status) {
+    TranslationInstallationStatus.checking =>
+      'Conferindo os arquivos reais dentro do jogo',
+    TranslationInstallationStatus.notInstalled =>
+      'Localize o jogo e instale o pacote de idioma',
+    TranslationInstallationStatus.installedCurrent =>
+      'Arquivos instalados e verificados por SHA-256',
+    TranslationInstallationStatus.installedOutdated =>
+      'Existe uma versão comprovadamente mais nova',
+    TranslationInstallationStatus.incomplete =>
+      controller.verification.receiptVersion == null
+          ? 'Arquivos parciais sem recibo seguro; preserve e verifique'
+          : 'Um ou mais arquivos estão ausentes; use Reparar',
+    TranslationInstallationStatus.modified =>
+      controller.verification.receiptVersion == null
+          ? 'Arquivos alterados sem recibo seguro; reparo foi bloqueado'
+          : 'Um ou mais arquivos foram alterados; use Reparar',
+    TranslationInstallationStatus.managedInAnotherDirectory =>
+      'Há uma instalação gerenciada em outra pasta',
+    TranslationInstallationStatus.incompatibleGameBuild =>
+      'A tradução pode não corresponder ao build atual do jogo',
+    TranslationInstallationStatus.unverifiable =>
+      'Não foi possível confirmar a integridade da tradução',
+  };
+}
+
 String _statusText(LauncherController controller) {
   return switch (controller.status) {
     LauncherStatus.starting => 'Sincronizando com a rede Eibon...',
+    LauncherStatus.loadingManifest => 'Carregando o manifesto da tradução...',
+    LauncherStatus.verifying =>
+      controller.currentFile.isEmpty
+          ? 'Verificando os arquivos reais da tradução...'
+          : 'Verificando ${controller.currentFile}',
     LauncherStatus.ready =>
       controller.isInstalled
-          ? 'Tradução v${controller.installedVersion} instalada'
+          ? _installationDescription(controller)
           : 'Sistema pronto para receber a tradução',
     LauncherStatus.downloading => 'Baixando ${controller.currentFile}',
     LauncherStatus.installing => 'Instalando a tradução no jogo...',
+    LauncherStatus.updating => 'Atualizando a tradução com segurança...',
+    LauncherStatus.repairing => 'Reparando e validando a tradução...',
     LauncherStatus.completed => 'Tradução instalada com sucesso',
     LauncherStatus.removing => 'Restaurando os arquivos originais...',
     LauncherStatus.error => 'Operação interrompida — consulte os detalhes',
@@ -1693,9 +1904,13 @@ String _statusText(LauncherController controller) {
 IconData _statusIcon(LauncherStatus status) {
   return switch (status) {
     LauncherStatus.starting => Icons.sync_rounded,
+    LauncherStatus.loadingManifest => Icons.cloud_download_outlined,
+    LauncherStatus.verifying => Icons.fact_check_outlined,
     LauncherStatus.ready => Icons.radio_button_checked,
     LauncherStatus.downloading => Icons.downloading_rounded,
     LauncherStatus.installing => Icons.auto_fix_high_rounded,
+    LauncherStatus.updating => Icons.update_rounded,
+    LauncherStatus.repairing => Icons.build_circle_outlined,
     LauncherStatus.completed => Icons.verified_rounded,
     LauncherStatus.removing => Icons.settings_backup_restore_rounded,
     LauncherStatus.error => Icons.error_outline_rounded,

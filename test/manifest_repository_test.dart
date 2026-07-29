@@ -50,9 +50,46 @@ void main() {
 
     final manifest = await repository.load();
 
-    expect(manifest?.translationVersion, 'nte-auto-20260729-010203-test');
+    expect(
+      manifest?.manifest.translationVersion,
+      'nte-auto-20260729-010203-test',
+    );
+    expect(manifest?.source.name, 'remote');
     expect(requestedUri?.queryParameters['channel'], 'stable');
     expect(requestedUri?.queryParameters['_nte_cache_bust'], isNotEmpty);
     expect(await paths.cachedManifest.readAsString(), source);
+  });
+
+  test('reports cache as offline source when remote request fails', () async {
+    final paths = AppPaths.forTesting(sandbox);
+    await paths.cache.create(recursive: true);
+    final source = jsonEncode({
+      'schemaVersion': 1,
+      'translationVersion': 'cached-version',
+      'publishedAt': '2026-07-28T01:02:03Z',
+      'files': [
+        {
+          'name': 'translation.pak',
+          'relativeDestination': 'Client/Content/Paks/translation.pak',
+          'url': 'https://github.com/example/releases/translation.pak',
+          'size': 42,
+          'sha256': 'a' * 64,
+        },
+      ],
+    });
+    await paths.cachedManifest.writeAsString(source);
+    final repository = ManifestRepository(
+      paths,
+      LauncherLog(paths.logFile),
+      remoteManifestUrl: 'https://example.com/manifest.json',
+      remoteManifestDownloader: (_) async =>
+          throw const SocketException('offline'),
+    );
+
+    final result = await repository.load();
+
+    expect(result?.source.name, 'cache');
+    expect(result?.isAuthoritative, isFalse);
+    expect(result?.manifest.translationVersion, 'cached-version');
   });
 }

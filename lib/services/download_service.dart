@@ -1,22 +1,24 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/app_paths.dart';
 import '../core/launcher_log.dart';
 import '../core/trusted_http_client.dart';
 import '../models/translation_manifest.dart';
+import 'file_integrity_service.dart';
 
 typedef DownloadProgressCallback =
     void Function(int receivedBytes, int totalBytes, String currentFile);
 
 class DownloadService {
-  DownloadService(this.paths, this.log);
+  DownloadService(this.paths, this.log, {FileIntegrityService? integrity})
+    : integrity = integrity ?? FileIntegrityService();
 
   final AppPaths paths;
   final LauncherLog log;
+  final FileIntegrityService integrity;
 
   Future<Directory> download(
     TranslationManifest manifest, {
@@ -97,6 +99,7 @@ class DownloadService {
           final response = await request.close().timeout(
             const Duration(seconds: 30),
           );
+          _validateRedirects(response, asset.url);
 
           if (response.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
             if (await partial.exists()) {
@@ -112,9 +115,22 @@ class DownloadService {
             );
           }
 
-          final append =
-              existingBytes > 0 &&
-              response.statusCode == HttpStatus.partialContent;
+          bool append;
+          try {
+            append = validateResumeResponse(
+              statusCode: response.statusCode,
+              contentRange: response.headers.value(
+                HttpHeaders.contentRangeHeader,
+              ),
+              existingBytes: existingBytes,
+              expectedSize: asset.size,
+            );
+          } on DownloadResumeException {
+            if (await partial.exists()) {
+              await partial.delete();
+            }
+            rethrow;
+          }
           if (!append) {
             existingBytes = 0;
           }
@@ -131,6 +147,11 @@ class DownloadService {
               }
               sink.add(chunk);
               receivedForFile += chunk.length;
+              if (receivedForFile > asset.size) {
+                throw DownloadIntegrityException(
+                  '${asset.name} excedeu o tamanho esperado.',
+                );
+              }
               onProgress(
                 completedBytes + receivedForFile,
                 totalBytes,
@@ -151,8 +172,12 @@ class DownloadService {
             '${asset.name} incompleto: $actualSize de ${asset.size} bytes.',
           );
         }
-        final actualHash = await _sha256(partial);
-        if (actualHash != asset.sha256) {
+        final verified = await integrity.startOperation().verify(
+          file: partial,
+          expectedSize: asset.size,
+          expectedSha256: asset.sha256,
+        );
+        if (!verified.isValid) {
           await partial.delete();
           throw DownloadIntegrityException(
             'SHA-256 inválido para ${asset.name}.',
@@ -189,14 +214,29 @@ class DownloadService {
   }
 
   Future<bool> _isValid(File file, TranslationFile asset) async {
-    if (!await file.exists() || await file.length() != asset.size) {
-      return false;
-    }
-    return await _sha256(file) == asset.sha256;
+    return (await integrity.startOperation().verify(
+      file: file,
+      expectedSize: asset.size,
+      expectedSha256: asset.sha256,
+    )).isValid;
   }
 
-  Future<String> _sha256(File file) async {
-    return (await sha256.bind(file.openRead()).first).toString();
+  void _validateRedirects(HttpClientResponse response, Uri original) {
+    const allowedHosts = {
+      'github.com',
+      'objects.githubusercontent.com',
+      'release-assets.githubusercontent.com',
+      'github-releases.githubusercontent.com',
+    };
+    for (final redirect in response.redirects) {
+      final target = redirect.location;
+      if (target.scheme != 'https' || !allowedHosts.contains(target.host)) {
+        throw HttpException(
+          'Redirecionamento de download não confiável.',
+          uri: original,
+        );
+      }
+    }
   }
 }
 
@@ -216,6 +256,44 @@ class DownloadIntegrityException extends DownloadException {
 
 class DownloadCancelledException extends DownloadException {
   const DownloadCancelledException() : super('Download cancelado.');
+}
+
+class DownloadResumeException extends DownloadException {
+  const DownloadResumeException(super.message);
+}
+
+bool validateResumeResponse({
+  required int statusCode,
+  required String? contentRange,
+  required int existingBytes,
+  required int expectedSize,
+}) {
+  if (statusCode == HttpStatus.ok) {
+    return false;
+  }
+  if (statusCode != HttpStatus.partialContent) {
+    throw DownloadResumeException(
+      'Resposta HTTP $statusCode não pode retomar o download.',
+    );
+  }
+  final match = contentRange == null
+      ? null
+      : RegExp(r'^bytes (\d+)-(\d+)/(\d+)$').firstMatch(contentRange);
+  if (match == null) {
+    throw const DownloadResumeException('Content-Range ausente ou inválido.');
+  }
+  final start = int.parse(match.group(1)!);
+  final end = int.parse(match.group(2)!);
+  final total = int.parse(match.group(3)!);
+  if (start != existingBytes ||
+      end < start ||
+      end >= total ||
+      total != expectedSize) {
+    throw const DownloadResumeException(
+      'Content-Range não corresponde ao arquivo esperado.',
+    );
+  }
+  return existingBytes > 0;
 }
 
 class _RestartDownloadException implements Exception {
