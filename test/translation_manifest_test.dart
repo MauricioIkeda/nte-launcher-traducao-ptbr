@@ -85,4 +85,93 @@ void main() {
     expect(manifest.gameBuildId, 'nte-build-42');
     expect(manifest.sourceHash, validHash);
   });
+
+  test('rejects unsafe or oversized game-build metadata', () {
+    for (final gameBuildId in [
+      'build\nunsafe',
+      ' spaced ',
+      List.filled(201, 'x').join(),
+      42,
+    ]) {
+      expect(
+        () => TranslationManifest.fromJson({
+          'schemaVersion': 1,
+          'translationVersion': '1.0.0',
+          'publishedAt': '2026-07-27T00:00:00.123Z',
+          'gameBuildId': gameBuildId,
+          'files': [
+            {
+              'name': 'translation.pak',
+              'relativeDestination': 'Client/Content/Paks/translation.pak',
+              'url': 'https://example.com/translation.pak',
+              'size': 42,
+              'sha256': validHash,
+            },
+          ],
+        }),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('requires a UTC Z publication date and accepts fractions', () {
+    Map<String, dynamic> manifestWithDate(String publishedAt) => {
+      'schemaVersion': 1,
+      'translationVersion': '1.0.0',
+      'publishedAt': publishedAt,
+      'files': [
+        {
+          'name': 'translation.pak',
+          'relativeDestination': 'Client/Content/Paks/translation.pak',
+          'url': 'https://example.com/translation.pak',
+          'size': 42,
+          'sha256': validHash,
+        },
+      ],
+    };
+
+    expect(
+      TranslationManifest.fromJson(
+        manifestWithDate('2026-07-27T00:00:00.123Z'),
+      ).publishedAt,
+      DateTime.utc(2026, 7, 27, 0, 0, 0, 123),
+    );
+    for (final invalid in [
+      '2026-07-27T00:00:00+00:00',
+      '2026-07-27',
+      'invalid',
+    ]) {
+      expect(
+        () => TranslationManifest.fromJson(manifestWithDate(invalid)),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('rejects duplicate file names case-insensitively', () {
+    expect(
+      () => TranslationManifest.fromJson({
+        'schemaVersion': 1,
+        'translationVersion': '1.0.0',
+        'publishedAt': '2026-07-27T00:00:00Z',
+        'files': [
+          {
+            'name': 'translation.pak',
+            'relativeDestination': 'Client/Content/Paks/one.pak',
+            'url': 'https://example.com/one.pak',
+            'size': 42,
+            'sha256': validHash,
+          },
+          {
+            'name': 'TRANSLATION.PAK',
+            'relativeDestination': 'Client/Content/Paks/two.pak',
+            'url': 'https://example.com/two.pak',
+            'size': 42,
+            'sha256': validHash,
+          },
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
 }

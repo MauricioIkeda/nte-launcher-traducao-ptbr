@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from manifest_sync import (
     AUTHORIZED_REPOSITORY,
@@ -24,6 +26,8 @@ from manifest_sync import (
     compare_manifest_to_release,
     download_manifest_asset,
     parse_public_manifest,
+    request_asset_sha256,
+    request_bytes,
     safe_summary,
     validate_dispatch_payload,
     validate_public_manifest,
@@ -34,6 +38,14 @@ SOURCE_HASH = "0123456789ab" + ("c" * 52)
 TAG = "nte-auto-20260729-120100-0123456789ab"
 PUBLISHED_AT = "2026-07-29T12:01:00Z"
 VALID_HASH = "a" * 64
+
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
 
 
 class PipelineFixture:
@@ -360,6 +372,35 @@ class ManifestTests(unittest.TestCase):
             parse_public_manifest(b"{broken")
         with self.assertRaisesRegex(ContractError, "limite"):
             parse_public_manifest(b"x" * (MAX_MANIFEST_BYTES + 1))
+
+    def test_http_reader_rejects_response_above_explicit_limit(self):
+        with patch(
+            "manifest_sync.urllib.request.urlopen",
+            return_value=FakeResponse(b"x" * 9),
+        ):
+            with self.assertRaisesRegex(ContractError, "mais de 8 bytes"):
+                request_bytes("https://api.github.com/test", max_bytes=8)
+
+    def test_fallback_asset_hash_is_streamed_and_size_bounded(self):
+        contents = b"streamed fixture"
+        with patch(
+            "manifest_sync.urllib.request.urlopen",
+            return_value=FakeResponse(contents),
+        ):
+            self.assertEqual(
+                request_asset_sha256(
+                    "https://github.com/test", len(contents)
+                ),
+                hashlib.sha256(contents).hexdigest(),
+            )
+        with patch(
+            "manifest_sync.urllib.request.urlopen",
+            return_value=FakeResponse(contents + b"!"),
+        ):
+            with self.assertRaisesRegex(ContractError, "excedeu"):
+                request_asset_sha256(
+                    "https://github.com/test", len(contents)
+                )
 
     def test_missing_fields_and_wrong_types_are_rejected(self):
         for field in (

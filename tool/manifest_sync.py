@@ -18,6 +18,8 @@ AUTHORIZED_REPOSITORY = "MauricioIkeda/nte-ptbr-releases"
 MANIFEST_ASSET = "translation_manifest.json"
 BUILD_MANIFEST_ASSET = "build-manifest.json"
 MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_API_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_FALLBACK_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 MAX_GAME_BUILD_ID = 200
 MAX_RELEASES = 300
 API_VERSION = "2022-11-28"
@@ -205,6 +207,7 @@ def request_bytes(
     token: str | None = None,
     *,
     accept: str = "application/vnd.github+json",
+    max_bytes: int = MAX_API_RESPONSE_BYTES,
 ) -> bytes:
     headers = {
         "Accept": accept,
@@ -216,7 +219,12 @@ def request_bytes(
     request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
-            return response.read()
+            raw = response.read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                raise ContractError(
+                    f"GitHub retornou mais de {max_bytes} bytes."
+                )
+            return raw
     except urllib.error.HTTPError as error:
         body = error.read(500).decode("utf-8", errors="replace")
         raise ContractError(
@@ -239,8 +247,58 @@ def request_json(url: str, token: str | None = None) -> Any:
 
 def request_asset_bytes(url: str, token: str | None = None) -> bytes:
     return request_bytes(
-        url, token, accept="application/octet-stream"
+        url,
+        token,
+        accept="application/octet-stream",
+        max_bytes=MAX_MANIFEST_BYTES,
     )
+
+
+def request_asset_sha256(
+    url: str,
+    expected_size: int,
+    token: str | None = None,
+) -> str:
+    if expected_size <= 0 or expected_size > MAX_FALLBACK_ASSET_BYTES:
+        raise ContractError("asset: tamanho excede o limite de fallback.")
+    headers = {
+        "Accept": "application/octet-stream",
+        "User-Agent": USER_AGENT,
+        "X-GitHub-Api-Version": API_VERSION,
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    digest = hashlib.sha256()
+    downloaded = 0
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            while True:
+                chunk = response.read(min(1024 * 1024, expected_size + 1))
+                if not chunk:
+                    break
+                downloaded += len(chunk)
+                if (
+                    downloaded > expected_size
+                    or downloaded > MAX_FALLBACK_ASSET_BYTES
+                ):
+                    raise ContractError(
+                        "asset: download excedeu o tamanho declarado."
+                    )
+                digest.update(chunk)
+    except ContractError:
+        raise
+    except urllib.error.HTTPError as error:
+        raise ContractError(
+            f"GitHub retornou HTTP {error.code} ao baixar asset."
+        ) from error
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        raise ContractError(
+            "GitHub ficou indisponível durante o download do asset."
+        ) from error
+    if downloaded != expected_size:
+        raise ContractError("asset: download possui tamanho divergente.")
+    return digest.hexdigest()
 
 
 def fetch_release_by_tag(
@@ -561,6 +619,8 @@ def _asset_digest(
         validate_tag(asset.get("_validated_tag")),
         name,
     )
+    if downloader is request_asset_bytes:
+        return request_asset_sha256(url, expected_size)
     contents = downloader(url, None)
     if not isinstance(contents, bytes) or len(contents) != expected_size:
         raise ContractError(f"asset {name}: download possui tamanho divergente.")

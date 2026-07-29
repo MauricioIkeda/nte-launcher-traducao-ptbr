@@ -82,6 +82,11 @@ comparado com o manifesto commitado:
 A tag não é tratada como uma versão semântica. `publishedAt` determina a ordem,
 e a data/hora embutida na tag deve corresponder a ele.
 
+`publishedAt` é a versão lógica preparada pela pipeline. `published_at`,
+devolvido pela API do GitHub, é somente metadata da publicação da release e
+não participa da monotonicidade. Frações de segundo UTC são aceitas; a parte
+até segundos deve coincidir com a data embutida na tag.
+
 ## Concorrência e commit
 
 O workflow usa concorrência serial, mas também atualiza `main` antes do commit,
@@ -106,3 +111,46 @@ downgrade automático.
 
 O workflow utiliza apenas `github.token` com `contents: write`. Nenhum token,
 payload completo ou URL temporária é incluído no manifesto ou no resumo.
+
+## Contrato instalado e compatibilidade
+
+Uma nova publicação exige `sourceHash`, tag oficial e exatamente cinco arquivos
+instaláveis nos destinos autorizados. O `gameBuildId` pode ser `null`; quando
+presente, é uma string sem caracteres de controle e com até 200 caracteres.
+
+O launcher mantém leitura compatível com o manifesto legado da `main`, que pode
+não possuir `sourceHash` nem `gameBuildId`. Essa tolerância existe apenas para a
+migração e para os fallbacks locais. O workflow nunca aceita uma nova release
+sem a identidade completa.
+
+Depois do parse, o launcher baixa em streaming, valida tamanho e SHA-256, instala
+por uma transação com recibo e verifica novamente os arquivos reais no disco.
+Cache e bundle não podem rebaixar um recibo válido mais novo. Reparo usa os
+mesmos hashes do manifesto; remoção preserva arquivos alterados depois da
+instalação.
+
+## Limites e teste integrado
+
+Respostas JSON da API são limitadas a 16 MiB, o manifesto a 1 MiB e o fallback
+de validação de asset a 2 GiB. Assets sem digest fornecido pela API são
+processados em streaming, sem carregar o arquivo inteiro em memória.
+
+`tool/test_cross_repository_contract.py` usa diretamente a pipeline privada
+quando os dois repositórios estão lado a lado. Ele prova LOCRES → identidade →
+build manifest → manifesto público → release simulada → dispatch → candidato →
+substituição atômica. O teste Flutter
+`test/integrated_publication_installation_test.dart` completa o percurso no
+cliente, incluindo estado atual, adulteração e reparo dos cinco arquivos.
+
+## Fontes da verdade
+
+- bytes do `Game.locres` original: fonte de `sourceHash`;
+- `prepared-release.json`: identidade imutável da publicação em andamento;
+- release pública validada: fonte dos sete assets distribuídos;
+- manifesto estático validado na `main`: entrada remota do launcher;
+- arquivos e recibo locais: fonte do estado real da instalação.
+
+O launcher ainda não extrai o LOCRES dos containers do jogo para comparar o
+`sourceHash` diretamente com a instalação. Quando disponível, `gameBuildId`
+serve como pista oficial de compatibilidade, não como substituto da verificação
+dos arquivos instalados.

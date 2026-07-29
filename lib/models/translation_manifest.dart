@@ -21,7 +21,7 @@ class TranslationManifest {
     final manifest = TranslationManifest(
       schemaVersion: json['schemaVersion'] as int,
       translationVersion: json['translationVersion'] as String,
-      publishedAt: DateTime.parse(json['publishedAt'] as String).toUtc(),
+      publishedAt: _utcDate(json['publishedAt']),
       gameBuildId: _optionalNonEmptyString(json['gameBuildId']),
       sourceHash: _optionalSha256(json['sourceHash']),
       files: (json['files'] as List<dynamic>)
@@ -45,7 +45,7 @@ class TranslationManifest {
     final destinations = <String>{};
     for (final file in files) {
       file.validate();
-      if (!names.add(file.name) ||
+      if (!names.add(file.name.toLowerCase()) ||
           !destinations.add(file.relativeDestination.toLowerCase())) {
         throw const FormatException('Arquivo duplicado no manifesto.');
       }
@@ -56,17 +56,34 @@ class TranslationManifest {
     if (value == null) {
       return null;
     }
-    if (value is! String || value.trim().isEmpty) {
+    if (value is! String ||
+        value != value.trim() ||
+        value.trim().isEmpty ||
+        value.trim().length > 200 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(value.trim())) {
       throw const FormatException('Identificador de build inválido.');
     }
     return value.trim();
+  }
+
+  static DateTime _utcDate(Object? value) {
+    if (value is! String ||
+        !RegExp(
+          r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$',
+        ).hasMatch(value)) {
+      throw const FormatException('Data de publicação inválida.');
+    }
+    return DateTime.parse(value).toUtc();
   }
 
   static String? _optionalSha256(Object? value) {
     if (value == null) {
       return null;
     }
-    final normalized = value.toString().toLowerCase();
+    if (value is! String) {
+      throw const FormatException('Hash de fonte inválido.');
+    }
+    final normalized = value.toLowerCase();
     if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(normalized)) {
       throw const FormatException('Hash de fonte inválido.');
     }
