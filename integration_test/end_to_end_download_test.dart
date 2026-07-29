@@ -1,17 +1,14 @@
 @TestOn('windows')
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:nte_translation_launcher/core/app_paths.dart';
 import 'package:nte_translation_launcher/core/launcher_log.dart';
-import 'package:nte_translation_launcher/core/trusted_http_client.dart';
 import 'package:nte_translation_launcher/models/translation_manifest.dart';
-import 'package:nte_translation_launcher/services/download_service.dart';
 import 'package:nte_translation_launcher/services/installation_service.dart';
 import 'package:path/path.dart' as p;
 
@@ -19,7 +16,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'downloads, validates, installs and restores the translation',
+    'validates, installs and restores a local translation fixture',
     (_) async {
       final sandbox = await Directory.systemTemp.createTemp('nte-e2e-');
       addTearDown(() async {
@@ -28,26 +25,49 @@ void main() {
         }
       });
 
-      await TrustedHttpClientFactory.initialize();
-      final manifest = TranslationManifest.fromJson(
-        jsonDecode(
-              await rootBundle.loadString(
-                'assets/manifest/translation_manifest.json',
-              ),
-            )
-            as Map<String, dynamic>,
-      );
+      const contents = <List<int>>[
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+        [10, 11, 12],
+        [13, 14, 15],
+      ];
+      const names = [
+        'UniversalSigBypasser.asi',
+        'version.dll',
+        'pakchunk999-Windows_999_P.pak',
+        'pakchunk999-Windows_999_P.utoc',
+        'pakchunk999-Windows_999_P.ucas',
+      ];
+      final manifest = TranslationManifest.fromJson({
+        'schemaVersion': 1,
+        'translationVersion': 'integration-fixture',
+        'publishedAt': '2026-07-29T12:00:00Z',
+        'files': [
+          for (var index = 0; index < names.length; index++)
+            {
+              'name': names[index],
+              'relativeDestination': index < 2
+                  ? 'Client/WindowsNoEditor/HT/Binaries/Win64/${names[index]}'
+                  : 'Client/WindowsNoEditor/HT/Content/Paks/${names[index]}',
+              'url': 'https://example.invalid/${names[index]}',
+              'size': contents[index].length,
+              'sha256': sha256.convert(contents[index]).toString(),
+            },
+        ],
+      });
       final paths = AppPaths.forTesting(Directory(p.join(sandbox.path, 'app')));
       await paths.root.create(recursive: true);
       final log = LauncherLog(paths.logFile);
-      final downloads = DownloadService(paths, log);
       final installer = InstallationService(paths, log);
 
-      final stage = await downloads.download(
-        manifest,
-        onProgress: (_, _, _) {},
-        isCancelled: () => false,
-      );
+      final stage = Directory(p.join(sandbox.path, 'stage'));
+      await stage.create();
+      for (var index = 0; index < manifest.files.length; index++) {
+        await File(
+          p.join(stage.path, manifest.files[index].name),
+        ).writeAsBytes(contents[index]);
+      }
 
       final game = Directory(p.join(sandbox.path, 'game'));
       await game.create(recursive: true);

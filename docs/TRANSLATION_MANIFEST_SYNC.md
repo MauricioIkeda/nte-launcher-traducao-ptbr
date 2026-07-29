@@ -154,3 +154,18 @@ O launcher ainda não extrai o LOCRES dos containers do jogo para comparar o
 `sourceHash` diretamente com a instalação. Quando disponível, `gameBuildId`
 serve como pista oficial de compatibilidade, não como substituto da verificação
 dos arquivos instalados.
+
+## Validação de Pull Requests
+
+O workflow `pull-request-validation.yml` executa somente em PRs destinados à
+`main`, com `contents: read`. Um job Ubuntu valida as ferramentas Python, o
+contrato, a sintaxe dos workflows, `actionlint` e whitespace. Um job Windows
+usa Flutter 3.44.8 para formato, análise, testes unitários, teste integrado e
+build Release.
+
+O teste integrado usa artefatos locais determinísticos: ele prova instalação,
+validação, backup, remoção e restauração sem consultar releases públicas nem
+depender de uma sessão gráfica. Os testes específicos do serviço de download
+continuam cobrindo retomada, respostas HTTP inválidas, limites e integridade.
+O teste cruzado com a pipeline é explicitamente ignorado quando o repositório
+privado não existe ao lado do checkout público.
