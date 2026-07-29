@@ -7,6 +7,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'installation_service.dart';
 
 typedef ExternalUriLauncher = Future<bool> Function(Uri uri);
+typedef GameExecutableLauncher =
+    Future<void> Function(
+      String executable,
+      List<String> arguments,
+      String workingDirectory,
+    );
 
 enum GamePlatform { epicGames, steam, official }
 
@@ -27,14 +33,18 @@ class GamePlatformService {
     Directory? epicManifestDirectory,
     List<Directory>? steamRoots,
     ExternalUriLauncher? externalUriLauncher,
+    GameExecutableLauncher? gameExecutableLauncher,
   }) : _epicManifestDirectory =
            epicManifestDirectory ?? _defaultEpicManifestDirectory(),
        _steamRootsOverride = steamRoots,
-       _externalUriLauncher = externalUriLauncher ?? _launchExternalUri;
+       _externalUriLauncher = externalUriLauncher ?? _launchExternalUri,
+       _gameExecutableLauncher =
+           gameExecutableLauncher ?? _launchGameExecutable;
 
   final Directory _epicManifestDirectory;
   final List<Directory>? _steamRootsOverride;
   final ExternalUriLauncher _externalUriLauncher;
+  final GameExecutableLauncher _gameExecutableLauncher;
 
   Future<GamePlatformInfo> detect(String gameDirectory) async {
     final epic = await _detectEpic(gameDirectory);
@@ -54,7 +64,11 @@ class GamePlatformService {
     );
   }
 
-  Future<void> launch(GamePlatformInfo info, String gameDirectory) async {
+  Future<void> launch(
+    GamePlatformInfo info,
+    String gameDirectory, {
+    bool officialAutoplay = true,
+  }) async {
     switch (info.platform) {
       case GamePlatform.epicGames:
       case GamePlatform.steam:
@@ -73,11 +87,10 @@ class GamePlatformService {
             'NTEGlobalLauncher.exe não foi encontrado.',
           );
         }
-        await Process.start(
+        await _gameExecutableLauncher(
           executable.path,
-          const [],
-          workingDirectory: gameDirectory,
-          mode: ProcessStartMode.detached,
+          officialAutoplay ? const ['/autoplay'] : const [],
+          gameDirectory,
         );
     }
   }
@@ -266,6 +279,19 @@ class GamePlatformService {
 
   static Future<bool> _launchExternalUri(Uri uri) {
     return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  static Future<void> _launchGameExecutable(
+    String executable,
+    List<String> arguments,
+    String workingDirectory,
+  ) async {
+    await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      mode: ProcessStartMode.detached,
+    );
   }
 }
 

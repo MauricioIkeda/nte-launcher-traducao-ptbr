@@ -4,6 +4,7 @@ class SettingsService {
   static const _gameDirectoryKey = 'game_directory';
   static const _installedVersionKey = 'installed_version';
   static const _automaticLauncherUpdatesKey = 'automatic_launcher_updates';
+  static const _officialAutoplayKey = 'official_autoplay';
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
@@ -28,4 +29,11 @@ class SettingsService {
 
   Future<void> setAutomaticLauncherUpdates(bool value) =>
       _preferences.setBool(_automaticLauncherUpdatesKey, value);
+
+  Future<bool> getOfficialAutoplay() async {
+    return await _preferences.getBool(_officialAutoplayKey) ?? true;
+  }
+
+  Future<void> setOfficialAutoplay(bool value) =>
+      _preferences.setBool(_officialAutoplayKey, value);
 }
