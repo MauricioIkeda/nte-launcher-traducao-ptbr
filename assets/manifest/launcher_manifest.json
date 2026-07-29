@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.0.2",
-  "publishedAt": "2026-07-28T06:27:53Z",
+  "version": "1.0.3",
+  "publishedAt": "2026-07-29T05:04:38Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.2/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19390208,
-    "sha256": "a4296d4b7bcb2594e2e536c7c2fa1580aeb2939efce903cea94191df35163d9e"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.3/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19404389,
+    "sha256": "26226ffec72684cc17cc756f6228f50f0b858052ac92d50de675a05cec169ba1"
   },
-  "releaseNotes": "Separa a pipeline privada e passa a consumir o repositório público oficial da tradução.",
+  "releaseNotes": "Adiciona autoplay opcional ao launcher oficial e fecha o launcher da tradução após iniciar o jogo.",
   "mandatory": false
 }
