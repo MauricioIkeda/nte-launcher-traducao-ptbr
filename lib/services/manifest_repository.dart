@@ -8,11 +8,22 @@ import '../core/launcher_log.dart';
 import '../core/trusted_http_client.dart';
 import '../models/translation_manifest.dart';
 
+typedef RemoteManifestDownloader = Future<String> Function(Uri uri);
+
 class ManifestRepository {
-  ManifestRepository(this.paths, this.log);
+  ManifestRepository(
+    this.paths,
+    this.log, {
+    String? remoteManifestUrl,
+    this.remoteManifestDownloader,
+  }) : _remoteManifestUrl = remoteManifestUrl ?? _defaultRemoteManifestUrl,
+       assert(
+         remoteManifestDownloader == null || remoteManifestUrl != null,
+         'A custom downloader requires an explicit remote manifest URL.',
+       );
 
   static const _bundledManifest = 'assets/manifest/translation_manifest.json';
-  static const _remoteManifestUrl = String.fromEnvironment(
+  static const _defaultRemoteManifestUrl = String.fromEnvironment(
     'NTE_MANIFEST_URL',
     defaultValue:
         'https://raw.githubusercontent.com/MauricioIkeda/'
@@ -22,6 +33,8 @@ class ManifestRepository {
 
   final AppPaths paths;
   final LauncherLog log;
+  final String _remoteManifestUrl;
+  final RemoteManifestDownloader? remoteManifestDownloader;
 
   Future<TranslationManifest?> load() async {
     if (_remoteManifestUrl.isNotEmpty) {
@@ -67,15 +80,32 @@ class ManifestRepository {
 
   Future<({TranslationManifest manifest, String source})>
   _downloadRemoteManifest() async {
-    final uri = Uri.parse(_remoteManifestUrl);
+    final baseUri = Uri.parse(_remoteManifestUrl);
+    final uri = baseUri.replace(
+      queryParameters: {
+        ...baseUri.queryParameters,
+        '_nte_cache_bust': DateTime.now()
+            .toUtc()
+            .microsecondsSinceEpoch
+            .toString(),
+      },
+    );
     if (uri.scheme != 'https') {
       throw const FormatException('O manifesto remoto precisa usar HTTPS.');
+    }
+
+    final injectedDownloader = remoteManifestDownloader;
+    if (injectedDownloader != null) {
+      final source = await injectedDownloader(uri);
+      return (manifest: _decode(source), source: source);
     }
 
     final client = TrustedHttpClientFactory.create();
     try {
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+      request.headers.set('Pragma', 'no-cache');
       final response = await request.close().timeout(
         const Duration(seconds: 20),
       );
