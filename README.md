@@ -193,7 +193,7 @@ python -m unittest discover -s tool -p "test_*.py"
 
 ```powershell
 C:\flutter\bin\flutter.bat build windows --release `
-  --build-name 1.0.3 --build-number 3
+  --build-name 1.0.4 --build-number 4
 ```
 
 O executável será criado em:
@@ -206,7 +206,7 @@ build/windows/x64/runner/Release/NTE-Launcher-Traducao-PTBR.exe
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" `
-  "/DMyAppVersion=1.0.3" `
+  "/DMyAppVersion=1.0.4" `
   "installer\NTE-Launcher-Traducao-PTBR.iss"
 ```
 
@@ -238,8 +238,8 @@ Release e atualiza o manifesto usado pelo atualizador automático.
 Também é possível publicar por tag:
 
 ```powershell
-git tag v1.0.3
-git push origin v1.0.3
+git tag v1.0.4
+git push origin v1.0.4
 ```
 
 ## Manifestos remotos

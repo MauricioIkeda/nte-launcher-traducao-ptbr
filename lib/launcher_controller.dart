@@ -47,7 +47,7 @@ class LauncherController extends ChangeNotifier {
   final ElevationService elevation;
   final GamePlatformService gamePlatforms;
   final InstallationService installer;
-  final SettingsService settings;
+  final LauncherSettings settings;
   final bool autoInstall;
 
   LauncherStatus status = LauncherStatus.starting;
@@ -73,12 +73,21 @@ class LauncherController extends ChangeNotifier {
       totalBytes <= 0 ? 0 : (receivedBytes / totalBytes).clamp(0, 1);
   bool get isBusy =>
       updatingLauncher ||
+      status == LauncherStatus.starting ||
       status == LauncherStatus.downloading ||
       status == LauncherStatus.installing ||
       status == LauncherStatus.removing;
   bool get canInstall => !isBusy && manifest != null && gameDirectory != null;
   bool get isInstalled =>
       installedVersion != null && installedVersion!.isNotEmpty;
+  bool get translationIsCurrent =>
+      isInstalled &&
+      manifest != null &&
+      installedVersion == manifest!.translationVersion;
+  bool get translationUpdateAvailable =>
+      isInstalled &&
+      manifest != null &&
+      installedVersion != manifest!.translationVersion;
 
   Future<void> initialize() async {
     status = LauncherStatus.starting;
@@ -101,15 +110,22 @@ class LauncherController extends ChangeNotifier {
       await _removeLegacyTranslationIfPresent();
       manifest = await manifests.load();
       totalBytes = manifest?.totalBytes ?? 0;
-      status = LauncherStatus.ready;
       await log.info('Launcher inicializado.');
-      notifyListeners();
       await checkLauncherUpdates();
       if (automaticLauncherUpdates && availableAppUpdate != null) {
         await installLauncherUpdate();
         return;
       }
+      status = LauncherStatus.ready;
       if (autoInstall && gameDirectory != null) {
+        await installOrUpdate();
+        return;
+      }
+      if (translationUpdateAvailable && gameDirectory != null) {
+        await log.info(
+          'Atualização automática da tradução: '
+          '$installedVersion -> ${manifest!.translationVersion}.',
+        );
         await installOrUpdate();
         return;
       }
@@ -258,7 +274,7 @@ class LauncherController extends ChangeNotifier {
 
   Future<void> launchGame() async {
     final directory = gameDirectory;
-    if (directory == null || isBusy) {
+    if (directory == null || isBusy || translationUpdateAvailable) {
       return;
     }
     try {

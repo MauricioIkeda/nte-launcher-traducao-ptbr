@@ -406,10 +406,7 @@ class _UpdatePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final manifest = controller.manifest;
     final availableVersion = manifest?.translationVersion;
-    final translationIsCurrent =
-        controller.isInstalled &&
-        availableVersion != null &&
-        controller.installedVersion == availableVersion;
+    final translationIsCurrent = controller.translationIsCurrent;
     final actionLabel = manifest == null
         ? 'AGUARDANDO PRIMEIRA TRADUÇÃO'
         : !controller.isInstalled
