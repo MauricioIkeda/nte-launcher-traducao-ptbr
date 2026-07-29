@@ -59,13 +59,14 @@ jobs:
           trap append_summary EXIT
 
           mode="recovery"
-          args=(--mode recovery)
+          args=()
           if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
             mode="dispatch"
-            args=(--mode dispatch --event-file "$EVENT_FILE")
+            args=(--event-file "$EVENT_FILE")
           fi
 
           python tool/generate_manifest.py \
+            --mode "$mode" \
             "${args[@]}" \
             --output "$manifest" \
             --result "$initial_result" \
@@ -110,6 +111,9 @@ jobs:
 
           create_commit() {
             local tag
+            # Python receives the file through argv; shell expansion in its
+            # single-quoted program is intentionally disabled.
+            # shellcheck disable=SC2016
             tag="$(python -c \
               'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["tag"])' \
               "$final_result")"
