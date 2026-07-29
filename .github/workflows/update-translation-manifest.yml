@@ -111,9 +111,6 @@ jobs:
 
           create_commit() {
             local tag
-            # Python receives the file through argv; shell expansion in its
-            # single-quoted program is intentionally disabled.
-            # shellcheck disable=SC2016
             tag="$(python -c \
               'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["tag"])' \
               "$final_result")"
@@ -143,6 +140,8 @@ jobs:
           for attempt in 1 2; do
             if git push origin HEAD:main; then
               commit="$(git rev-parse HEAD)"
+              # Backticks delimit Markdown and must remain literal.
+              # shellcheck disable=SC2016
               printf '\n- Commit criado: `%s`\n' "$commit" >> "$summary"
               exit 0
             fi
