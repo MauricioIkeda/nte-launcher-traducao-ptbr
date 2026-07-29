@@ -60,6 +60,7 @@ class LauncherController extends ChangeNotifier {
   bool checkingAppUpdate = false;
   bool updatingLauncher = false;
   bool automaticLauncherUpdates = false;
+  bool officialAutoplay = true;
   int appUpdateReceivedBytes = 0;
   int appUpdateTotalBytes = 0;
   String? errorMessage;
@@ -86,6 +87,7 @@ class LauncherController extends ChangeNotifier {
       gameDirectory = await settings.getGameDirectory();
       installedVersion = await settings.getInstalledVersion();
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
+      officialAutoplay = await settings.getOfficialAutoplay();
       if (gameDirectory == null ||
           !await installer.isValidGameDirectory(gameDirectory!)) {
         const defaultPath = r'C:\Program Files\Neverness To Everness';
@@ -123,9 +125,7 @@ class LauncherController extends ChangeNotifier {
 
   Future<void> _removeLegacyTranslationIfPresent() async {
     final version = installedVersion;
-    if (version == null ||
-        version.isEmpty ||
-        version.startsWith('nte-auto-')) {
+    if (version == null || version.isEmpty || version.startsWith('nte-auto-')) {
       return;
     }
     if (await installer.hasReceipt()) {
@@ -265,7 +265,14 @@ class LauncherController extends ChangeNotifier {
       final platform = gamePlatform ?? await gamePlatforms.detect(directory);
       gamePlatform = platform;
       await log.info('Abrindo o jogo pela plataforma ${platform.label}.');
-      await gamePlatforms.launch(platform, directory);
+      await gamePlatforms.launch(
+        platform,
+        directory,
+        officialAutoplay: officialAutoplay,
+      );
+      await log.info('Jogo acionado com sucesso; encerrando o launcher.');
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      exit(0);
     } catch (error, stackTrace) {
       await _setError('Não foi possível abrir o jogo.', error, stackTrace);
       notifyListeners();
@@ -296,6 +303,12 @@ class LauncherController extends ChangeNotifier {
   Future<void> setAutomaticLauncherUpdates(bool value) async {
     automaticLauncherUpdates = value;
     await settings.setAutomaticLauncherUpdates(value);
+    notifyListeners();
+  }
+
+  Future<void> setOfficialAutoplay(bool value) async {
+    officialAutoplay = value;
+    await settings.setOfficialAutoplay(value);
     notifyListeners();
   }
 
