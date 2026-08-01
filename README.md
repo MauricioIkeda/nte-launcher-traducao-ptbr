@@ -26,12 +26,42 @@
 > Hotta Studio, Perfect World Games, Steam ou Epic Games. O uso de modificações
 > pode estar sujeito aos termos do jogo. Utilize por sua conta e risco.
 
+## Escolha o seu objetivo
+
+### Quero somente instalar e usar a tradução
+
+Você não precisa instalar Git, Flutter, Dart, Python, Visual Studio, VS Code, Inno Setup ou GitHub CLI.
+
+Siga apenas a seção [Instalação](#instalação) deste README ou a primeira parte do [guia manual para Windows](docs/CONFIGURACAO_MANUAL_WINDOWS.md#cenário-a--somente-usar-o-launcher).
+
+### Quero desenvolver, corrigir bugs ou publicar o launcher
+
+Use o manual completo:
+
+**[Guia manual do NTE Launcher Tradução PT-BR no Windows](docs/CONFIGURACAO_MANUAL_WINDOWS.md)**
+
+Ele explica para uma pessoa sem ambiente preparado:
+
+- para que serve cada programa;
+- quais programas são obrigatórios e quais são opcionais;
+- como instalar exatamente o Flutter 3.44.8;
+- por que Dart não precisa ser instalado separadamente;
+- como configurar o Visual Studio com desenvolvimento C++;
+- como instalar Python e Inno Setup;
+- como autenticar a GitHub CLI;
+- como clonar e abrir o projeto;
+- como executar, testar e simular uma pasta do jogo;
+- como criar build Release e instalador;
+- como trabalhar com branches;
+- como preparar e auditar uma release;
+- o que precisa ou não ser salvo antes de formatar.
+
 ## O que o launcher faz
 
 - instala, atualiza e remove a tradução PT-BR pela mesma interface;
 - encontra instalações feitas pela Epic Games, Steam ou launcher oficial;
 - abre o jogo pela plataforma correta, respeitando o fluxo da loja;
-- consulta manifestos estáticos, sem depender da API pública do GitHub;
+- consulta manifestos estáticos, sem depender da API pública do GitHub no computador do jogador;
 - valida tamanho e SHA-256 de todos os downloads;
 - preserva os arquivos originais antes de aplicar a tradução;
 - usa instalação atômica e rollback quando uma operação falha;
@@ -46,19 +76,40 @@
 2. Baixe `NTE-Launcher-Traducao-PTBR-Setup.exe`.
 3. Execute o instalador.
 4. Abra **NTE Launcher Tradução PT-BR**.
-5. Confirme ou selecione a pasta do jogo.
+5. Confirme ou selecione a pasta principal do jogo.
 6. Clique em **Instalar tradução**.
 
-Quando a tradução estiver atualizada, a ação principal muda para **Jogar pela
-Epic Games**, **Jogar pela Steam** ou **Jogar pelo launcher oficial**, conforme
-a instalação detectada.
+A pasta correta normalmente contém:
 
-Para desfazer a modificação, clique em **Remover tradução**. O launcher
-restaurará os arquivos originais preservados no backup.
+```text
+NTEGlobalLauncher.exe
+Client\
+```
+
+Não selecione `Client`, `Paks`, `Binaries` ou uma pasta de downloads.
+
+Quando a tradução estiver atualizada, a ação principal muda para **Jogar pela Epic Games**, **Jogar pela Steam** ou **Jogar pelo launcher oficial**, conforme a instalação detectada.
+
+Para desfazer a modificação, clique em **Remover tradução**. O launcher restaurará os arquivos originais preservados no backup.
 
 > [!NOTE]
-> O instalador ainda não possui assinatura Authenticode. O Windows pode exibir
-> o SmartScreen ou identificar o publicador como desconhecido.
+> O instalador ainda não possui assinatura Authenticode. O Windows pode exibir o SmartScreen ou identificar o publicador como desconhecido. Confirme que o arquivo veio da release oficial deste repositório.
+
+## Onde o programa é instalado
+
+Instalação padrão:
+
+```text
+%LOCALAPPDATA%\Programs\NTE Launcher Tradução PT-BR
+```
+
+Executável:
+
+```text
+%LOCALAPPDATA%\Programs\NTE Launcher Tradução PT-BR\NTE-Launcher-Traducao-PTBR.exe
+```
+
+O launcher mantém preferências, logs, recibos, transações e backups no diretório de dados do usuário. Antes de apagar manualmente esses dados, remova a tradução pela interface.
 
 ## Como funciona
 
@@ -79,23 +130,17 @@ Launcher ── baixa arquivos diretamente da release
           └── instala com rollback protegido
 ```
 
-O GitHub Action concentra a consulta à API. Os computadores dos jogadores
-baixam apenas arquivos estáticos pelo `raw.githubusercontent.com`. Isso evita
-que usuários da mesma operadora ou rede CGNAT compartilhem o pequeno limite
-anônimo da API do GitHub.
+O GitHub Action concentra a consulta à API. Os computadores dos jogadores baixam arquivos estáticos. Isso evita que usuários da mesma operadora ou rede CGNAT compartilhem o pequeno limite anônimo da API pública do GitHub.
 
 ## Plataformas do jogo
 
 O launcher tenta identificar a origem da instalação:
 
-- **Epic Games:** lê o manifesto local da Epic e inicia o jogo pelo protocolo
-  oficial da loja;
+- **Epic Games:** lê o manifesto local da Epic e inicia o jogo pelo protocolo oficial da loja;
 - **Steam:** localiza o `appmanifest` e usa o protocolo oficial da Steam;
-- **Launcher oficial:** inicia o executável oficial encontrado na pasta do
-  jogo.
+- **Launcher oficial:** inicia o executável oficial encontrado na pasta do jogo.
 
-O botão de jogo funciona como um atalho para a plataforma detectada. O launcher
-não tenta falsificar login, conta, licença ou inicialização da loja.
+O botão de jogo funciona como um atalho para a plataforma detectada. O launcher não tenta falsificar login, conta, licença ou inicialização da loja.
 
 ## Segurança
 
@@ -109,18 +154,15 @@ Antes de modificar a instalação, o launcher:
 6. escreve primeiro em arquivos temporários;
 7. restaura o estado anterior se alguma etapa falhar.
 
-O cliente HTTPS combina as raízes confiáveis do Windows com o bundle de
-certificados do projeto cURL/Mozilla. Isso corrige ambientes em que a cadeia de
-certificados apresentada ao Flutter não pode ser validada apenas pelo sistema.
+O cliente HTTPS combina as raízes confiáveis do Windows com o bundle de certificados do projeto cURL/Mozilla.
+
+Nenhum token do GitHub, Gemini API key ou AES key é distribuído com o launcher.
 
 ### Estado local, recibos e backups
 
-O estado exibido pelo launcher vem dos arquivos reais encontrados no diretório
-selecionado. A versão salva nas preferências é apenas metadado de migração: ela
-não comprova que a tradução continua instalada.
+O estado exibido vem dos arquivos reais encontrados no diretório selecionado. A versão salva nas preferências é apenas metadado de migração e não comprova que a tradução continua instalada.
 
-Cada instalação do NTE recebe um identificador SHA-256 derivado do caminho
-canônico e mantém dados independentes:
+Cada instalação do NTE recebe um identificador SHA-256 derivado do caminho canônico e mantém dados independentes:
 
 ```text
 installations/
@@ -130,154 +172,95 @@ installations/
     transactions/
 ```
 
-O recibo versionado registra os hashes do que foi instalado e dos originais.
-Instalação, atualização e reparo usam uma transação com validação final; o
-recibo só é confirmado depois que todos os destinos passam por tamanho e
-SHA-256.
+O recibo registra hashes do que foi instalado e dos originais. Instalação, atualização e reparo usam uma transação com validação final; o recibo só é confirmado depois que todos os destinos passam por tamanho e SHA-256.
 
-Na remoção, um arquivo ainda igual ao instalado pelo launcher é restaurado ou
-excluído. Se ele tiver sido alterado depois, o launcher o preserva, informa uma
-remoção parcial e mantém o recibo e os backups necessários para diagnóstico.
-Dados de outra pasta nunca são reutilizados.
+Na remoção, um arquivo ainda igual ao instalado é restaurado ou excluído. Se ele tiver sido alterado posteriormente, o launcher o preserva, informa uma remoção parcial e mantém recibo e backups para diagnóstico. Dados de outra pasta nunca são reutilizados.
 
 ## Atualização da tradução
 
-O workflow
-[`update-translation-manifest.yml`](.github/workflows/update-translation-manifest.yml)
-possui dois modos explícitos:
+O workflow [`update-translation-manifest.yml`](.github/workflows/update-translation-manifest.yml) possui dois modos:
 
-1. **dispatch:** recebe da pipeline a tag e o hash do manifesto exatos, busca
-   somente essa release e valida payload, bytes, JSON e assets;
-2. **recuperação:** no cron ou acionamento manual, lista releases publicadas,
-   ignora ferramentas, drafts e prereleases e seleciona a candidata válida mais
-   recente.
+1. **dispatch:** recebe da pipeline a tag e o hash exatos;
+2. **recuperação:** no cron ou acionamento manual, procura a candidata pública válida mais recente.
 
-Antes de atualizar, o workflow cruza o manifesto publicado com os cinco assets
-instaláveis, restringe URLs e destinos e bloqueia downgrade, tag mutável ou
-datas ambíguas. A branch é atualizada e a monotonicidade é conferida novamente
-antes do commit; um retry controlado de push também repete essa prova.
+Antes de atualizar, o workflow cruza o manifesto publicado com os assets instaláveis, restringe URLs e destinos e bloqueia downgrade, tag mutável ou datas ambíguas.
 
 O launcher consulta, nesta ordem:
 
 1. manifesto remoto;
 2. última cópia válida armazenada em cache;
-3. manifesto embutido, quando já existe uma tradução própria publicada.
+3. manifesto embutido.
 
-A origem aparece na interface. Somente um manifesto remoto válido e
-comprovadamente mais novo pode iniciar atualização automática; cache e bundle
-mantêm o modo offline, mas nunca provocam downgrade.
+Somente um manifesto remoto válido e comprovadamente mais novo pode iniciar atualização automática. Cache e bundle permitem uso offline, mas nunca provocam downgrade.
 
-Quando a pipeline publica uma tradução, ela aciona imediatamente a atualização
-do manifesto. A consulta periódica funciona como redundância.
+O contrato está documentado em [`docs/TRANSLATION_MANIFEST_SYNC.md`](docs/TRANSLATION_MANIFEST_SYNC.md).
 
-Nenhum token do GitHub é distribuído com o launcher.
+## Atualização do próprio launcher
 
-O contrato, as validações e o comportamento idempotente estão documentados em
-[`docs/TRANSLATION_MANIFEST_SYNC.md`](docs/TRANSLATION_MANIFEST_SYNC.md).
+O arquivo [`launcher_manifest.json`](assets/manifest/launcher_manifest.json) informa versão, URL do instalador, tamanho e SHA-256.
 
-## Atualização do launcher
+Quando existe uma versão semântica mais recente, o launcher oferece a atualização. Se a opção automática estiver habilitada, ele baixa, valida e inicia o instalador silencioso, encerrando o processo atual antes da substituição.
 
-O arquivo
-[`launcher_manifest.json`](assets/manifest/launcher_manifest.json) informa a
-versão mais recente, o endereço do instalador, seu tamanho e SHA-256.
-
-Quando existe uma versão semântica mais recente, o launcher oferece a
-atualização na interface. Se a opção automática estiver habilitada, ele baixa,
-valida e inicia o instalador silencioso, encerrando o processo atual antes de
-substituir os arquivos.
-
-### Compatibilidade com a versão 1.0.0
-
-O nome público foi padronizado como **NTE Launcher Tradução PT-BR**, mas o
-instalador conserva o mesmo `AppId` da versão 1.0.0. Assim, o Windows reconhece
-as versões futuras como atualização do programa existente.
-
-A primeira atualização com o nome padronizado também remove o executável e os
-atalhos antigos. A pasta técnica de dados permanece compatível para preservar
-configurações, recibos de instalação e backups necessários para remover a
-tradução.
+O instalador conserva o mesmo `AppId` das versões anteriores para que o Windows reconheça novas releases como atualização do mesmo aplicativo.
 
 ## Desenvolvimento
 
-### Requisitos
+O desenvolvimento é manual e consciente; não existe necessidade de executar um preparador automático.
 
-- Windows 10 ou 11;
-- Flutter 3.44.8 ou compatível, com desktop Windows habilitado;
-- Visual Studio com **Desenvolvimento para desktop com C++**;
-- Git;
-- Python 3 para os geradores de manifesto;
-- Inno Setup 6 para compilar o instalador localmente.
+Consulte:
 
-### Executar e testar
+**[Guia manual de desenvolvimento no Windows](docs/CONFIGURACAO_MANUAL_WINDOWS.md#cenário-b--desenvolver-o-launcher)**
 
-```powershell
-C:\flutter\bin\flutter.bat pub get
-C:\flutter\bin\flutter.bat run -d windows
-```
-
-Para simular uma instalação do jogo, crie uma pasta vazia, coloque nela um
-arquivo chamado `NTEGlobalLauncher.exe` e selecione essa pasta na interface.
-
-Validação do projeto:
-
-```powershell
-C:\flutter\bin\flutter.bat analyze
-C:\flutter\bin\flutter.bat test
-python -m unittest discover -s tool -p "test_*.py"
-```
-
-### Build para Windows
-
-```powershell
-C:\flutter\bin\flutter.bat build windows --release `
-  --build-name 1.0.4 --build-number 4
-```
-
-O executável será criado em:
+Resumo do ambiente validado:
 
 ```text
-build/windows/x64/runner/Release/NTE-Launcher-Traducao-PTBR.exe
+Windows 10 ou 11
+Flutter 3.44.8
+Dart incluído no Flutter
+Visual Studio com Desenvolvimento para desktop com C++
+Git
+Python 3.12 para ferramentas e testes
+Inno Setup 6 somente para o instalador
+GitHub CLI somente para operações remotas
 ```
 
-### Instalador local
+Comandos essenciais depois de preparar o ambiente:
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" `
-  "/DMyAppVersion=1.0.4" `
-  "installer\NTE-Launcher-Traducao-PTBR.iss"
+flutter pub get
+flutter run -d windows
+flutter analyze
+flutter test
+flutter test integration_test
+py -3.12 -m unittest discover -s tool -p "test_*.py"
+flutter build windows --release
 ```
 
-Resultado:
+O executável Release fica em:
 
 ```text
-build/installer/NTE-Launcher-Traducao-PTBR-Setup.exe
+build\windows\x64\runner\Release\NTE-Launcher-Traducao-PTBR.exe
 ```
 
-Novas instalações são feitas em
-`%LOCALAPPDATA%\Programs\NTE Launcher Tradução PT-BR`, sem exigir privilégios
-administrativos.
+Não mova apenas o `.exe`; execute-o dentro da pasta `Release`, junto de seus arquivos auxiliares.
 
 ## Publicar uma versão
 
-O workflow
-[`release-launcher.yml`](.github/workflows/release-launcher.yml) pode ser
-iniciado em **Actions > Release Windows launcher > Run workflow**.
+O método recomendado é:
+
+```text
+Actions > Release Windows launcher > Run workflow
+```
 
 Informe:
 
-- uma versão no formato `MAJOR.MINOR.PATCH`, sem o prefixo `v`;
-- notas curtas da versão;
-- se a atualização deve ou não ser obrigatória.
+- versão `MAJOR.MINOR.PATCH`, sem `v`;
+- notas curtas;
+- se a atualização deve ser obrigatória.
 
-O workflow executa testes, compila o launcher e o instalador, publica a GitHub
-Release e atualiza o manifesto usado pelo atualizador automático.
+O workflow executa testes, compila o launcher e o instalador, publica a release e atualiza o manifesto do atualizador automático.
 
-Também é possível publicar por tag:
-
-```powershell
-git tag v1.0.4
-git push origin v1.0.4
-```
+O processo completo de versão, build, Inno Setup, GitHub CLI e auditoria está no [guia manual](docs/CONFIGURACAO_MANUAL_WINDOWS.md#18-publicar-uma-release).
 
 ## Manifestos remotos
 
@@ -293,18 +276,18 @@ Launcher:
 https://raw.githubusercontent.com/MauricioIkeda/nte-launcher-traducao-ptbr/main/assets/manifest/launcher_manifest.json
 ```
 
-Os endereços podem ser substituídos em builds personalizados com
-`NTE_MANIFEST_URL` e `NTE_LAUNCHER_MANIFEST_URL`.
+Os endereços podem ser substituídos em builds personalizados com `NTE_MANIFEST_URL` e `NTE_LAUNCHER_MANIFEST_URL`.
+
+## Documentação
+
+- [Guia manual do launcher no Windows](docs/CONFIGURACAO_MANUAL_WINDOWS.md)
+- [Sincronização do manifesto da tradução](docs/TRANSLATION_MANIFEST_SYNC.md)
 
 ## Créditos
 
-- Tradução PT-BR e pipeline automática:
-  MauricioIkeda / NTE Translation Studio
-- Certificados:
-  [cURL CA Extract](https://curl.se/docs/caextract.html)
-- Carregamento técnico:
-  [UniversalSigBypasser](https://github.com/rm-NoobInCoding/UniversalSigBypasser)
-  e [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
+- Tradução PT-BR e pipeline automática: MauricioIkeda / NTE Translation Studio
+- Certificados: [cURL CA Extract](https://curl.se/docs/caextract.html)
+- Carregamento técnico: [UniversalSigBypasser](https://github.com/rm-NoobInCoding/UniversalSigBypasser) e [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
 - Desenvolvimento do launcher: [MauricioIkeda](https://github.com/MauricioIkeda)
 - Interface: Flutter
 
