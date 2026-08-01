@@ -78,6 +78,9 @@ class LauncherController extends ChangeNotifier {
   int appUpdateReceivedBytes = 0;
   int appUpdateTotalBytes = 0;
   String? errorMessage;
+  String? rejectedGameDirectory;
+  String? gameDirectorySelectionError;
+  bool validatingGameDirectory = false;
   String currentFile = '';
   int receivedBytes = 0;
   int totalBytes = 0;
@@ -102,6 +105,7 @@ class LauncherController extends ChangeNotifier {
   }
 
   bool get isBusy =>
+      validatingGameDirectory ||
       updatingLauncher ||
       status == LauncherStatus.starting ||
       status == LauncherStatus.loadingManifest ||
@@ -112,6 +116,7 @@ class LauncherController extends ChangeNotifier {
       status == LauncherStatus.repairing ||
       status == LauncherStatus.removing;
   bool get canChangeGameDirectory =>
+      !validatingGameDirectory &&
       !updatingLauncher &&
       status != LauncherStatus.starting &&
       status != LauncherStatus.loadingManifest &&
@@ -258,25 +263,54 @@ class LauncherController extends ChangeNotifier {
     if (!canChangeGameDirectory) {
       return;
     }
+
+    final candidate = selected.trim();
     final operation = ++_operationGeneration;
-    verification = const TranslationVerificationResult.checking();
-    gamePlatform = null;
-    errorMessage = null;
-    status = LauncherStatus.verifying;
+    validatingGameDirectory = true;
+    rejectedGameDirectory = candidate;
+    gameDirectorySelectionError = null;
     _notify();
-    if (!await installer.isValidGameDirectory(selected)) {
+
+    bool isValid;
+    try {
+      isValid = await installer.isValidGameDirectory(candidate);
+    } catch (error, stackTrace) {
       if (_isCurrent(operation)) {
-        errorMessage = 'A pasta selecionada não contém NTEGlobalLauncher.exe.';
-        verification = const TranslationVerificationResult(
-          status: TranslationInstallationStatus.unverifiable,
+        validatingGameDirectory = false;
+        gameDirectorySelectionError =
+            'Não foi possível verificar a pasta selecionada.';
+        await log.error(
+          'Falha ao validar o diretório candidato $candidate: '
+          '$error\n$stackTrace',
         );
-        status = LauncherStatus.error;
         _notify();
       }
       return;
     }
-    gameDirectory = selected;
-    await settings.setGameDirectory(selected);
+
+    if (!_isCurrent(operation)) {
+      return;
+    }
+
+    if (!isValid) {
+      validatingGameDirectory = false;
+      gameDirectorySelectionError =
+          'A pasta selecionada não contém NTEGlobalLauncher.exe.';
+      _notify();
+      return;
+    }
+
+    validatingGameDirectory = false;
+    rejectedGameDirectory = null;
+    gameDirectorySelectionError = null;
+    verification = const TranslationVerificationResult.checking();
+    gamePlatform = null;
+    errorMessage = null;
+    status = LauncherStatus.verifying;
+    gameDirectory = candidate;
+    _notify();
+
+    await settings.setGameDirectory(candidate);
     await _detectGamePlatform(operation);
     if (loadedManifest != null && _isCurrent(operation)) {
       await _verifyCurrent(operation);

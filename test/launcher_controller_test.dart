@@ -131,6 +131,71 @@ void main() {
   );
 
   test(
+    'invalid directory preserves active game state and exposes local error',
+    () async {
+      final manifest = testManifest(contents: contents);
+      final stage = await createStage(sandbox, manifest, contents);
+      await harness.installer.install(manifest, stage, game.path);
+
+      final settings = _FakeSettings(game.path);
+      final controller = harness.controller(
+        manifest: manifest,
+        contents: contents,
+        settings: settings,
+      );
+      await controller.initialize();
+
+      final previousPlatform = controller.gamePlatform;
+      final invalid = Directory(p.join(sandbox.path, 'downloads'));
+      await invalid.create();
+
+      await controller.selectGameDirectory(invalid.path);
+
+      expect(controller.gameDirectory, game.path);
+      expect(settings.gameDirectory, game.path);
+      expect(controller.translationIsCurrent, isTrue);
+      expect(controller.gamePlatform?.label, previousPlatform?.label);
+      expect(controller.status, LauncherStatus.ready);
+      expect(controller.errorMessage, isNull);
+      expect(controller.rejectedGameDirectory, invalid.path);
+      expect(
+        controller.gameDirectorySelectionError,
+        contains('NTEGlobalLauncher.exe'),
+      );
+      expect(controller.validatingGameDirectory, isFalse);
+    },
+  );
+
+  test('valid directory clears a previous directory selection error', () async {
+    final other = await createGame(sandbox, 'other');
+    final invalid = Directory(p.join(sandbox.path, 'invalid'));
+    await invalid.create();
+
+    final settings = _FakeSettings(game.path);
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: settings,
+    );
+    await controller.initialize();
+
+    await controller.selectGameDirectory(invalid.path);
+
+    expect(controller.gameDirectorySelectionError, isNotNull);
+    expect(controller.rejectedGameDirectory, invalid.path);
+    expect(controller.gameDirectory, game.path);
+
+    await controller.selectGameDirectory(other.path);
+
+    expect(controller.gameDirectory, other.path);
+    expect(settings.gameDirectory, other.path);
+    expect(controller.gameDirectorySelectionError, isNull);
+    expect(controller.rejectedGameDirectory, isNull);
+    expect(controller.validatingGameDirectory, isFalse);
+    expect(controller.status, LauncherStatus.ready);
+  });
+
+  test(
     'stale verification result cannot overwrite a newer directory',
     () async {
       final first = await createGame(sandbox, 'first');
