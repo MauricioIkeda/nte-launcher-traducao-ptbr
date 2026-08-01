@@ -574,6 +574,11 @@ class _UpdatePanel extends StatelessWidget {
           ],
           const SizedBox(height: 14),
           _FolderField(controller: controller),
+          if (controller.validatingGameDirectory ||
+              controller.gameDirectorySelectionError != null) ...[
+            const SizedBox(height: 10),
+            _GameDirectorySelectionNotice(controller: controller),
+          ],
           if (controller.gamePlatform?.platform == GamePlatform.official) ...[
             const SizedBox(height: 10),
             _OfficialAutoplayToggle(controller: controller),
@@ -1138,7 +1143,7 @@ class _FolderField extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'LOCALIZAÇÃO DO JOGO  •  CLIQUE PARA ALTERAR',
+                      'LOCALIZAÇÃO ATIVA DO JOGO  •  CLIQUE PARA ALTERAR',
                       style: TextStyle(
                         color: _muted,
                         fontSize: 8,
@@ -1171,6 +1176,135 @@ class _FolderField extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _GameDirectorySelectionNotice extends StatelessWidget {
+  const _GameDirectorySelectionNotice({required this.controller});
+
+  final LauncherController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final validating = controller.validatingGameDirectory;
+    final candidate = controller.rejectedGameDirectory;
+    final activeDirectory = controller.gameDirectory;
+
+    final description = validating
+        ? candidate == null || candidate.isEmpty
+              ? 'Conferindo a pasta selecionada...'
+              : 'Conferindo $candidate'
+        : activeDirectory == null
+        ? 'Escolha a pasta principal do NTE, onde está '
+              'NTEGlobalLauncher.exe.'
+        : 'A localização ativa não foi alterada e continua sendo '
+              '$activeDirectory';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: _yellow.withValues(alpha: .09),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _yellow.withValues(alpha: .38)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: validating
+                ? const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _yellow,
+                    ),
+                  )
+                : const Icon(
+                    Icons.folder_off_outlined,
+                    color: _yellow,
+                    size: 18,
+                  ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  validating ? 'VALIDANDO PASTA' : 'PASTA NÃO RECONHECIDA',
+                  style: const TextStyle(
+                    color: Color(0xFFFFE99A),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .8,
+                  ),
+                ),
+                if (!validating &&
+                    controller.gameDirectorySelectionError != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    controller.gameDirectorySelectionError!,
+                    style: const TextStyle(
+                      color: Color(0xFFFFE4A8),
+                      fontSize: 9,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFD8E1E9),
+                    fontSize: 8,
+                    height: 1.35,
+                  ),
+                ),
+                if (!validating &&
+                    candidate != null &&
+                    candidate.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    'Tentativa rejeitada: $candidate',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFB7C5D1),
+                      fontSize: 8,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (!validating) ...[
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: controller.canChangeGameDirectory
+                  ? controller.chooseGameDirectory
+                  : null,
+              icon: const Icon(Icons.folder_open_rounded, size: 15),
+              label: const Text(
+                'ESCOLHER OUTRA PASTA',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .6,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: _yellow,
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
