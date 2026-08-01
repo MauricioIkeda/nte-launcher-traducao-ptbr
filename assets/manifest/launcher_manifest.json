@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.0.4",
-  "publishedAt": "2026-07-29T06:50:27Z",
+  "version": "1.1.0",
+  "publishedAt": "2026-08-01T04:01:29Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.0.4/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19407487,
-    "sha256": "9c135438b6a82b706bde568ff52b8bc3bae4c72fa6f85ce7f805ca8de0068908"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.1.0/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19458168,
+    "sha256": "b17d9b5259528ede713e822c1c2c7ddb8a90e478778a23165792ff1fac208cf8"
   },
-  "releaseNotes": "Atualiza automaticamente novas versões da tradução, evita cache desatualizado e bloqueia ações conflitantes durante a instalação.",
+  "releaseNotes": "Adiciona verificação real da tradução por SHA-256, instalação, atualização, reparo e remoção transacionais, backups separados por instalação e troca segura do diretório do jogo.",
   "mandatory": false
 }
