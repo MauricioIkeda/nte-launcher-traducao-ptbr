@@ -91,6 +91,29 @@ class CrossRepositoryContractTests(unittest.TestCase):
                         "pending": 0,
                         "invalid": 0,
                     },
+                    translation_provenance={
+                        "total": 5,
+                        "automatic": 0,
+                        "deterministic": 0,
+                        "imported": 0,
+                        "manualCorrections": 5,
+                        "manualUniqueEntries": 5,
+                        "reusedFromMemory": 0,
+                        "pending": 0,
+                        "invalid": 0,
+                        "validatedEmpty": 0,
+                    },
+                    tools={
+                        "ueExtractor": {
+                            "version": "1.0.8.4",
+                            "sha256": "a" * 64,
+                            "dllSha256": "c" * 64,
+                        },
+                        "repak": {
+                            "version": "0.2.3",
+                            "sha256": "b" * 64,
+                        },
+                    },
                     files=artifacts,
                     deterministic=True,
                 )
