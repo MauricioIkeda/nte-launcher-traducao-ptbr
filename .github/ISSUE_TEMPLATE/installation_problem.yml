@@ -1,0 +1,65 @@
+name: Problema de instalação ou atualização
+description: Receba ajuda para instalar, atualizar, reparar ou remover a tradução.
+title: "[Instalação]: "
+labels: ["question"]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Antes de continuar
+      options:
+        - label: Fechei o jogo antes de tentar a operação.
+          required: true
+        - label: Confirmei que selecionei a pasta que contém NTEGlobalLauncher.exe.
+          required: true
+        - label: Estou usando a versão mais recente do launcher.
+          required: true
+        - label: Removi tokens, senhas e outros dados sensíveis dos anexos.
+          required: true
+  - type: dropdown
+    id: operation
+    attributes:
+      label: Operação que apresentou problema
+      options:
+        - Instalar tradução
+        - Atualizar tradução
+        - Reparar tradução
+        - Remover tradução
+        - Atualizar o launcher
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Plataforma do jogo
+      options:
+        - Epic Games
+        - Steam
+        - Launcher oficial
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versões
+      description: Informe a versão do launcher e, se exibida, a versão da tradução.
+      placeholder: "Launcher 1.2.0; tradução nte-auto-..."
+    validations:
+      required: true
+  - type: textarea
+    id: preflight
+    attributes:
+      label: Resultado da pré-instalação ou mensagem de erro
+      description: Copie a mensagem mostrada pelo launcher.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnóstico
+      description: Use “Exportar diagnóstico” nas configurações e arraste o arquivo aqui. Revise-o antes de enviar.
+  - type: textarea
+    id: details
+    attributes:
+      label: Informações adicionais
+      description: Conte o que já tentou e anexe capturas de tela, se ajudarem.

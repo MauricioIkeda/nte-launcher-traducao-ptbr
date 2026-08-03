@@ -8,6 +8,7 @@ import 'package:nte_translation_launcher/core/launcher_log.dart';
 import 'package:nte_translation_launcher/launcher_controller.dart';
 import 'package:nte_translation_launcher/models/app_update_manifest.dart';
 import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart';
+import 'package:nte_translation_launcher/models/pre_installation_check.dart';
 import 'package:nte_translation_launcher/models/translation_installation.dart';
 import 'package:nte_translation_launcher/models/translation_manifest.dart';
 import 'package:nte_translation_launcher/services/app_update_service.dart';
@@ -18,6 +19,7 @@ import 'package:nte_translation_launcher/services/game_platform_service.dart';
 import 'package:nte_translation_launcher/services/installation_service.dart';
 import 'package:nte_translation_launcher/services/legacy_migration_service.dart';
 import 'package:nte_translation_launcher/services/manifest_repository.dart';
+import 'package:nte_translation_launcher/services/pre_installation_service.dart';
 import 'package:nte_translation_launcher/services/receipt_repository.dart';
 import 'package:nte_translation_launcher/services/safe_path_service.dart';
 import 'package:nte_translation_launcher/services/settings_service.dart';
@@ -262,6 +264,25 @@ void main() {
     expect(controller.translationIsCurrent, isTrue);
   });
 
+  test('failed pre-installation check blocks the download', () async {
+    final downloads = _FakeDownloadService(paths, log, contents);
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: _FakeSettings(game.path),
+      downloads: downloads,
+      preInstallation: _BlockedPreInstallationService(harness.installer, log),
+    );
+    await controller.initialize();
+
+    await controller.installOrUpdate();
+
+    expect(controller.status, LauncherStatus.error);
+    expect(controller.preInstallationReport?.canProceed, isFalse);
+    expect(controller.errorMessage, contains('Feche o jogo'));
+    expect(downloads.started.isCompleted, isFalse);
+  });
+
   test('repair restores missing file and finishes verified', () async {
     final manifest = testManifest(contents: contents);
     final stage = await createStage(sandbox, manifest, contents);
@@ -387,6 +408,7 @@ class _Harness {
     DownloadService? downloads,
     ElevationService? elevation,
     GamePlatformService? gamePlatforms,
+    PreInstallationService? preInstallation,
     bool autoInstall = false,
   }) {
     final actualVerifier =
@@ -415,6 +437,8 @@ class _Harness {
         receipts: receipts,
         safePaths: safePaths,
       ),
+      preInstallation:
+          preInstallation ?? _PassingPreInstallationService(installer, log),
       autoInstall: autoInstall,
     );
   }
@@ -532,6 +556,44 @@ class _FakeGamePlatformService extends GamePlatformService {
   }) async {
     launchCount++;
   }
+}
+
+class _BlockedPreInstallationService extends PreInstallationService {
+  _BlockedPreInstallationService(InstallationService installer, LauncherLog log)
+    : super(installer: installer, elevation: _FakeElevationService(log));
+
+  @override
+  Future<PreInstallationReport> run({
+    required TranslationManifest manifest,
+    required String gameDirectory,
+    required String downloadDirectory,
+  }) async => const PreInstallationReport([
+    PreInstallationCheck(
+      id: 'game-process',
+      label: 'Jogo fechado',
+      detail: 'Feche o jogo antes de continuar.',
+      status: PreInstallationCheckStatus.failed,
+    ),
+  ]);
+}
+
+class _PassingPreInstallationService extends PreInstallationService {
+  _PassingPreInstallationService(InstallationService installer, LauncherLog log)
+    : super(installer: installer, elevation: _FakeElevationService(log));
+
+  @override
+  Future<PreInstallationReport> run({
+    required TranslationManifest manifest,
+    required String gameDirectory,
+    required String downloadDirectory,
+  }) async => const PreInstallationReport([
+    PreInstallationCheck(
+      id: 'test',
+      label: 'Ambiente de teste',
+      detail: 'Aprovado.',
+      status: PreInstallationCheckStatus.passed,
+    ),
+  ]);
 }
 
 class _FakeAppUpdateService extends AppUpdateService {

@@ -8,6 +8,7 @@ import 'core/app_paths.dart';
 import 'core/launcher_log.dart';
 import 'models/app_update_manifest.dart';
 import 'models/loaded_translation_manifest.dart';
+import 'models/pre_installation_check.dart';
 import 'models/translation_installation.dart';
 import 'models/translation_manifest.dart';
 import 'services/app_update_service.dart';
@@ -17,6 +18,7 @@ import 'services/game_platform_service.dart';
 import 'services/installation_service.dart';
 import 'services/legacy_migration_service.dart';
 import 'services/manifest_repository.dart';
+import 'services/pre_installation_service.dart';
 import 'services/settings_service.dart';
 import 'services/translation_verification_service.dart';
 
@@ -24,6 +26,7 @@ enum LauncherStatus {
   starting,
   loadingManifest,
   verifying,
+  preparing,
   ready,
   downloading,
   installing,
@@ -47,8 +50,11 @@ class LauncherController extends ChangeNotifier {
     required this.settings,
     required this.verifier,
     required this.migration,
+    PreInstallationService? preInstallation,
     this.autoInstall = false,
-  });
+  }) : preInstallation =
+           preInstallation ??
+           PreInstallationService(installer: installer, elevation: elevation);
 
   final AppPaths paths;
   final LauncherLog log;
@@ -61,6 +67,7 @@ class LauncherController extends ChangeNotifier {
   final LauncherSettings settings;
   final TranslationVerificationService verifier;
   final LegacyMigrationService migration;
+  final PreInstallationService preInstallation;
   final bool autoInstall;
 
   LauncherStatus status = LauncherStatus.starting;
@@ -82,6 +89,7 @@ class LauncherController extends ChangeNotifier {
   String? rejectedGameDirectory;
   String? gameDirectorySelectionError;
   bool validatingGameDirectory = false;
+  PreInstallationReport? preInstallationReport;
   String currentFile = '';
   int receivedBytes = 0;
   int totalBytes = 0;
@@ -111,6 +119,7 @@ class LauncherController extends ChangeNotifier {
       status == LauncherStatus.starting ||
       status == LauncherStatus.loadingManifest ||
       status == LauncherStatus.verifying ||
+      status == LauncherStatus.preparing ||
       status == LauncherStatus.downloading ||
       status == LauncherStatus.installing ||
       status == LauncherStatus.updating ||
@@ -121,6 +130,7 @@ class LauncherController extends ChangeNotifier {
       !updatingLauncher &&
       status != LauncherStatus.starting &&
       status != LauncherStatus.loadingManifest &&
+      status != LauncherStatus.preparing &&
       status != LauncherStatus.downloading &&
       status != LauncherStatus.installing &&
       status != LauncherStatus.updating &&
@@ -305,6 +315,7 @@ class LauncherController extends ChangeNotifier {
     rejectedGameDirectory = null;
     gameDirectorySelectionError = null;
     verification = const TranslationVerificationResult.checking();
+    preInstallationReport = null;
     gamePlatform = null;
     errorMessage = null;
     status = LauncherStatus.verifying;
@@ -423,10 +434,29 @@ class LauncherController extends ChangeNotifier {
     currentFile = '';
     receivedBytes = 0;
     totalBytes = selectedManifest.totalBytes;
-    status = LauncherStatus.downloading;
+    preInstallationReport = null;
+    status = LauncherStatus.preparing;
     _notify();
 
     try {
+      final report = await preInstallation.run(
+        manifest: selectedManifest,
+        gameDirectory: selectedGameDirectory,
+        downloadDirectory: paths.downloads.path,
+      );
+      if (!_isCurrent(operation)) {
+        return;
+      }
+      preInstallationReport = report;
+      await log.info(
+        'Pré-instalação: ${report.passedCount} aprovações, '
+        '${report.warningCount} avisos, ${report.failures.length} falhas.',
+      );
+      if (!report.canProceed) {
+        throw InstallationException(report.failureSummary);
+      }
+      status = LauncherStatus.downloading;
+      _notify();
       final stage = await downloads.download(
         selectedManifest,
         onProgress: (received, total, file) {
@@ -683,6 +713,10 @@ class LauncherController extends ChangeNotifier {
       'installedTranslationVersion': installedVersion,
       'verificationStatus': verification.status.name,
       'offlineMode': offlineMode,
+      'preInstallationChecks': [
+        for (final check in preInstallationReport?.checks ?? const [])
+          {'id': check.id, 'status': check.status.name, 'detail': check.detail},
+      ],
       'lastError': errorMessage,
       'logFiles': [
         paths.logFile.path,

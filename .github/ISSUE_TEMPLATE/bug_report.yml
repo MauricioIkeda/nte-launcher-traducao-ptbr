@@ -1,0 +1,69 @@
+name: Bug do launcher
+description: Relate um comportamento incorreto ou falha da interface.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Verificações iniciais
+      options:
+        - label: Procurei por relatos semelhantes e não encontrei uma solução.
+          required: true
+        - label: Estou usando a versão mais recente do launcher.
+          required: true
+        - label: Removi tokens, senhas e outros dados sensíveis dos anexos.
+          required: true
+  - type: input
+    id: launcher-version
+    attributes:
+      label: Versão do launcher
+      description: A versão aparece no canto inferior direito.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Versão do Windows
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Plataforma do jogo
+      options:
+        - Epic Games
+        - Steam
+        - Launcher oficial
+        - Não se aplica / não sei
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: O que aconteceu?
+      description: Explique o comportamento observado e o que você esperava.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abri o launcher...
+        2. Cliquei em...
+        3. O erro apareceu...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnóstico
+      description: Use “Exportar diagnóstico” nas configurações e arraste o arquivo aqui. Revise-o antes de enviar.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Capturas de tela ou informações adicionais
+      description: Não publique dados pessoais, senhas ou tokens.

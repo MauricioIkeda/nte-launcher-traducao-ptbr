@@ -59,6 +59,15 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+$') {
             throw "Version must use MAJOR.MINOR.PATCH."
           }
+          $pubspecLine = Get-Content "pubspec.yaml" |
+            Where-Object { $_ -match '^version:\s*' } |
+            Select-Object -First 1
+          if ($pubspecLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+\d+\s*$') {
+            throw "pubspec.yaml must define version MAJOR.MINOR.PATCH+BUILD."
+          }
+          if ($Matches[1] -ne $version) {
+            throw "Requested version $version does not match pubspec.yaml $($Matches[1])."
+          }
           "version=$version" >> $env:GITHUB_OUTPUT
           "notes=$notes" >> $env:GITHUB_OUTPUT
 
