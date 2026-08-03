@@ -326,4 +326,16 @@ segurança](SECURITY.md).
 - Desenvolvimento do launcher: [MauricioIkeda](https://github.com/MauricioIkeda)
 - Interface: Flutter
 
-Contribuições e relatos de problemas são bem-vindos.
+Relatos de problemas e sugestões são bem-vindos. Contribuições de código ou
+tradução exigem acordo prévio sobre os termos de contribuição.
+
+## Licença
+
+O launcher é distribuído sob uma
+[licença proprietária](LICENSE), não open source. É permitido instalar e usar
+as versões oficiais, sem modificações, para fins pessoais e não comerciais.
+Não é permitido modificar, republicar, espelhar, redistribuir ou apresentar o
+projeto como próprio sem autorização prévia por escrito.
+
+Os componentes de terceiros mencionados nos créditos mantêm suas próprias
+licenças e não são relicenciados por este projeto.
