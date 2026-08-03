@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.2.0",
-  "publishedAt": "2026-08-03T01:56:19Z",
+  "version": "1.3.0",
+  "publishedAt": "2026-08-03T03:46:25Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.2.0/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19461264,
-    "sha256": "0e209eedb3a87aafba47ad299b23f1d1fe920a29e0f7b85cd4b290984432db73"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.0/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19500573,
+    "sha256": "1d71bd8645891f8df08ff3e3dd5cfae2f9f26864cbe6b3409e7481dd0d3d1850"
   },
-  "releaseNotes": "Diagnósticos exportáveis, rotação de logs e melhorias de segurança e confiabilidade na publicação.",
+  "releaseNotes": "Pré-verificação de instalação, central de suporte visível e formulários aprimorados para bugs e tradução.",
   "mandatory": false
 }
