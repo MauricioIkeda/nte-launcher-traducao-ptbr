@@ -26,10 +26,12 @@ class AppPaths {
   Directory get transactions => Directory(p.join(root.path, 'transactions'));
   Directory get installations => Directory(p.join(root.path, 'installations'));
   Directory get updates => Directory(p.join(root.path, 'updates'));
+  Directory get diagnostics => Directory(p.join(root.path, 'diagnostics'));
   File get cachedManifest =>
       File(p.join(cache.path, 'automatic-translation-v1.json'));
   File get updateInstaller =>
       File(p.join(updates.path, 'NTE-Launcher-Traducao-PTBR-Setup.exe'));
   File get installReceipt => File(p.join(root.path, 'install_receipt.json'));
   File get logFile => File(p.join(root.path, 'launcher.log'));
+  File get diagnosticFile => File(p.join(diagnostics.path, 'diagnostico.json'));
 }

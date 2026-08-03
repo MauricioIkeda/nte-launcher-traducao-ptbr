@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -79,6 +80,24 @@ void main() {
     expect(statuses, contains(LauncherStatus.loadingManifest));
     expect(statuses, contains(LauncherStatus.verifying));
     expect(statuses.last, LauncherStatus.ready);
+  });
+
+  test('exports diagnostics without secrets or remote writes', () async {
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: _FakeSettings(game.path),
+    );
+    await controller.initialize();
+
+    final file = await controller.exportDiagnostics(reveal: false);
+    final diagnostics = await file.readAsString();
+    final decoded = jsonDecode(diagnostics) as Map<String, dynamic>;
+
+    expect(diagnostics, contains('verificationStatus'));
+    expect(decoded['gameDirectory'], game.path);
+    expect(diagnostics, isNot(contains('token')));
+    expect(diagnostics, isNot(contains('api_key')));
   });
 
   test(

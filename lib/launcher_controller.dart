@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -666,6 +667,45 @@ class LauncherController extends ChangeNotifier {
     errorMessage = null;
     status = LauncherStatus.ready;
     _notify();
+  }
+
+  Future<File> exportDiagnostics({bool reveal = true}) async {
+    await paths.diagnostics.create(recursive: true);
+    final payload = {
+      'schemaVersion': 1,
+      'createdAt': DateTime.now().toUtc().toIso8601String(),
+      'launcherVersion': appVersion,
+      'status': status.name,
+      'gameDirectory': gameDirectory,
+      'platform': gamePlatform?.label,
+      'manifestSource': manifestSource?.name,
+      'availableTranslationVersion': manifest?.translationVersion,
+      'installedTranslationVersion': installedVersion,
+      'verificationStatus': verification.status.name,
+      'offlineMode': offlineMode,
+      'lastError': errorMessage,
+      'logFiles': [
+        paths.logFile.path,
+        for (var index = 1; index <= 5; index++) '${paths.logFile.path}.$index',
+      ],
+    };
+    final temporary = File('${paths.diagnosticFile.path}.tmp');
+    await temporary.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(payload),
+      flush: true,
+    );
+    if (await paths.diagnosticFile.exists()) {
+      await paths.diagnosticFile.delete();
+    }
+    await temporary.rename(paths.diagnosticFile.path);
+    await log.info('Diagnóstico exportado para ${paths.diagnosticFile.path}.');
+    if (reveal && Platform.isWindows) {
+      await Process.start('explorer.exe', [
+        '/select,',
+        paths.diagnosticFile.path,
+      ]);
+    }
+    return paths.diagnosticFile;
   }
 
   Future<void> _setError(
