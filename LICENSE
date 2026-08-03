@@ -1,0 +1,93 @@
+NTE PT-BR PROPRIETARY LICENSE
+Version 1.0 — August 2026
+
+Copyright (c) 2026 Mauricio Ikeda. All rights reserved.
+
+This is a proprietary license. It is not an open-source or free-software
+license.
+
+1. Scope
+
+This License applies only to the original source code, user interfaces,
+documentation, branding, and original Portuguese (Brazil) translation work
+owned by Mauricio Ikeda and distributed through the following official
+projects (collectively, the "Project"):
+
+- nte-ptbr-automatic-translation, including NTE Translation Studio;
+- nte-launcher-traducao-ptbr; and
+- nte-ptbr-releases.
+
+It does not apply to Neverness to Everness, its original text or assets, or to
+third-party software and components. Those materials remain subject to the
+rights and licenses of their respective owners.
+
+2. Limited end-user permission
+
+You may download and use unmodified official binary releases of the launcher
+and translation, solely for your own personal, non-commercial use with a
+lawfully obtained copy of Neverness to Everness.
+
+No permission is granted to use the Project's source code, internal pipeline,
+translation database, branding, or documentation for another project or
+service.
+
+3. Restrictions
+
+Except with prior written permission from Mauricio Ikeda, you may not:
+
+a. copy, modify, adapt, translate, merge, or create derivative works from any
+   protected part of the Project;
+b. redistribute, republish, mirror, upload, transmit, sublicense, sell, rent,
+   monetize, or otherwise make the Project or its protected parts available
+   to third parties, whether modified or unmodified;
+c. represent the Project, any derivative, or any portion of it as your own
+   work, or remove or alter authorship, copyright, license, or attribution
+   notices;
+d. use the Project's name, logos, visual identity, release manifests, or
+   distribution infrastructure to imply sponsorship, endorsement, or official
+   status; or
+e. use the Project or its translation to create or operate a competing
+   launcher, translation release, localization service, or distribution.
+
+Attribution alone does not authorize an otherwise prohibited use.
+
+4. Public repository access
+
+Making source code visible on a public hosting platform does not grant a
+copyright license beyond the limited permission in Section 2. Platform
+features that technically permit viewing or forking do not authorize use,
+modification, or redistribution outside permissions required by the
+platform's terms and applicable law.
+
+5. Contributions
+
+Submitting code, translations, or other material does not transfer ownership
+to the Project owner. Contributions may be incorporated only under separate
+written terms accepted by both the contributor and Mauricio Ikeda.
+
+6. Third-party materials
+
+Third-party components bundled with, downloaded by, or referenced by the
+Project retain their own copyright notices and licenses. Nothing in this
+License restricts rights independently granted under those licenses, nor does
+it grant rights in Neverness to Everness or other third-party content.
+
+7. Termination
+
+The permission in Section 2 terminates automatically if you violate this
+License. Upon termination, you must stop using and delete all copies of the
+Project in your possession, except where retention is required by law.
+
+8. Disclaimer
+
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE
+COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGE, OR OTHER LIABILITY
+ARISING FROM THE PROJECT OR ITS USE.
+
+9. Additional permission
+
+Requests for redistribution, modification, integration, partnership, or other
+uses not permitted here must receive prior written authorization from
+Mauricio Ikeda through an official Project contact channel.
