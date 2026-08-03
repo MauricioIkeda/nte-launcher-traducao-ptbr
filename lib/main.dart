@@ -1098,6 +1098,20 @@ class _SettingsDialog extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final file = await controller.exportDiagnostics();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Diagnóstico salvo em ${file.path}'),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.support_agent_rounded, size: 17),
+                    label: const Text('EXPORTAR DIAGNÓSTICO'),
+                  ),
+                  const SizedBox(height: 10),
                   const Text(
                     'Toda atualização é conferida antes de ser instalada.',
                     textAlign: TextAlign.center,

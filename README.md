@@ -36,6 +36,8 @@
 - preserva os arquivos originais antes de aplicar a tradução;
 - usa instalação atômica e rollback quando uma operação falha;
 - mantém um log técnico local para facilitar diagnósticos;
+- rotaciona o log automaticamente e permite exportar um diagnóstico sem
+  credenciais pela tela de configurações;
 - verifica atualizações do próprio launcher;
 - oferece atualização automática opcional, desativada por padrão;
 - possui instalador, atalhos e desinstalador nativos para Windows.
