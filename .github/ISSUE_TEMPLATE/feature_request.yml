@@ -1,0 +1,21 @@
+name: Sugestão de melhoria
+description: Proponha uma melhoria para o launcher ou para a experiência de instalação.
+title: "[Sugestão]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema essa sugestão resolve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Solução sugerida
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas

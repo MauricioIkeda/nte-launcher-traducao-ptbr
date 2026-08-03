@@ -1,0 +1,60 @@
+name: Erro ou sugestão de tradução
+description: Relate um texto incorreto, estranho, fora de contexto ou não traduzido.
+title: "[Tradução]: "
+labels: ["translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por ajudar a melhorar a tradução PT-BR. Para este tipo de relato, uma captura de tela e o contexto são mais úteis que o diagnóstico técnico do launcher.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Tipo de conteúdo
+      options:
+        - Diálogo
+        - Missão ou objetivo
+        - Interface ou menu
+        - Item, habilidade ou equipamento
+        - Tutorial ou mensagem do sistema
+        - Texto não traduzido
+        - Outro
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Onde o texto aparece?
+      description: Informe missão, menu, personagem, local ou outra referência que ajude a encontrá-lo.
+      placeholder: "Diálogo da missão..., personagem..., menu..."
+    validations:
+      required: true
+  - type: textarea
+    id: current-text
+    attributes:
+      label: Tradução atual
+      description: Copie exatamente o texto exibido no jogo.
+    validations:
+      required: true
+  - type: textarea
+    id: original-text
+    attributes:
+      label: Texto original, se disponível
+      description: Informe o texto em inglês, chinês ou outro idioma quando conseguir consultá-lo.
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Tradução sugerida
+      description: Escreva como você acredita que o texto deveria aparecer.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto e justificativa
+      description: Explique tom, gênero, personagem, limite visual ou motivo da correção.
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Captura de tela
+      description: Arraste a imagem para este campo. Não publique informações pessoais.

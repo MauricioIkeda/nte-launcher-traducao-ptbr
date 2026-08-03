@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Guia de suporte
+    url: https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/blob/main/SUPPORT.md
+    about: Consulte os passos de diagnóstico antes de abrir um relato.
+  - name: Vulnerabilidade de segurança
+    url: https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/security/advisories/new
+    about: Relate vulnerabilidades de forma privada, sem publicar detalhes sensíveis.

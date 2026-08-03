@@ -33,6 +33,7 @@
 - abre o jogo pela plataforma correta, respeitando o fluxo da loja;
 - consulta manifestos estáticos, sem depender da API pública do GitHub;
 - valida tamanho e SHA-256 de todos os downloads;
+- verifica pasta, jogo aberto, permissões e espaço livre antes do download;
 - preserva os arquivos originais antes de aplicar a tradução;
 - usa instalação atômica e rollback quando uma operação falha;
 - mantém um log técnico local para facilitar diagnósticos;
@@ -232,7 +233,7 @@ python -m unittest discover -s tool -p "test_*.py"
 
 ```powershell
 C:\flutter\bin\flutter.bat build windows --release `
-  --build-name 1.0.4 --build-number 4
+  --build-name 1.3.0 --build-number 12
 ```
 
 O executável será criado em:
@@ -245,7 +246,7 @@ build/windows/x64/runner/Release/NTE-Launcher-Traducao-PTBR.exe
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" `
-  "/DMyAppVersion=1.0.4" `
+  "/DMyAppVersion=1.3.0" `
   "installer\NTE-Launcher-Traducao-PTBR.iss"
 ```
 
@@ -271,14 +272,18 @@ Informe:
 - notas curtas da versão;
 - se a atualização deve ou não ser obrigatória.
 
+Antes de executar o workflow, atualize o campo `version` do `pubspec.yaml`.
+O workflow bloqueia a publicação se a versão solicitada e a versão do código
+não forem iguais.
+
 O workflow executa testes, compila o launcher e o instalador, publica a GitHub
 Release e atualiza o manifesto usado pelo atualizador automático.
 
 Também é possível publicar por tag:
 
 ```powershell
-git tag v1.0.4
-git push origin v1.0.4
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 ## Manifestos remotos
@@ -297,6 +302,17 @@ https://raw.githubusercontent.com/MauricioIkeda/nte-launcher-traducao-ptbr/main/
 
 Os endereços podem ser substituídos em builds personalizados com
 `NTE_MANIFEST_URL` e `NTE_LAUNCHER_MANIFEST_URL`.
+
+## Suporte e relatos
+
+O botão **Suporte**, sempre visível na barra superior do launcher, abre a
+central com formulários separados para bugs, problemas de instalação, erros de
+tradução e sugestões. Antes de relatar uma falha técnica, use **Exportar
+diagnóstico** e anexe o arquivo depois de revisá-lo.
+
+Consulte o [guia de suporte](SUPPORT.md). Vulnerabilidades devem ser enviadas
+de forma privada pela aba **Security**, conforme a [política de
+segurança](SECURITY.md).
 
 ## Créditos
 

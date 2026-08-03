@@ -8,6 +8,7 @@ import 'core/launcher_log.dart';
 import 'core/trusted_http_client.dart';
 import 'launcher_controller.dart';
 import 'models/loaded_translation_manifest.dart';
+import 'models/pre_installation_check.dart';
 import 'models/translation_installation.dart';
 import 'services/file_integrity_service.dart';
 import 'services/app_update_service.dart';
@@ -17,6 +18,7 @@ import 'services/game_platform_service.dart';
 import 'services/installation_service.dart';
 import 'services/legacy_migration_service.dart';
 import 'services/manifest_repository.dart';
+import 'services/pre_installation_service.dart';
 import 'services/receipt_repository.dart';
 import 'services/safe_path_service.dart';
 import 'services/settings_service.dart';
@@ -50,13 +52,14 @@ Future<void> main(List<String> arguments) async {
     safePaths: safePaths,
     log: log,
   );
+  final elevation = ElevationService(log);
   final controller = LauncherController(
     paths: paths,
     log: log,
     appUpdates: AppUpdateService(paths, log),
     manifests: ManifestRepository(paths, log),
     downloads: DownloadService(paths, log, integrity: integrity),
-    elevation: ElevationService(log),
+    elevation: elevation,
     gamePlatforms: GamePlatformService(),
     installer: installer,
     settings: SettingsService(),
@@ -67,6 +70,10 @@ Future<void> main(List<String> arguments) async {
       integrity: integrity,
       receipts: receipts,
       safePaths: safePaths,
+    ),
+    preInstallation: PreInstallationService(
+      installer: installer,
+      elevation: elevation,
     ),
     autoInstall: arguments.contains('--install'),
   );
@@ -283,6 +290,14 @@ class _TopBar extends StatelessWidget {
         const Spacer(),
         _LiveStatus(controller: controller),
         const SizedBox(width: 10),
+        _TopAction(
+          label: 'SUPORTE',
+          icon: Icons.support_agent_rounded,
+          onPressed: controller.isBusy
+              ? null
+              : () => _openSupportCenter(context),
+        ),
+        const SizedBox(width: 8),
         _TopAction(
           label: 'CONFIGURAÇÕES',
           icon: Icons.tune_rounded,
@@ -588,6 +603,10 @@ class _UpdatePanel extends StatelessWidget {
           if (controller.errorMessage != null) ...[
             const SizedBox(height: 10),
             _ErrorMessage(message: controller.errorMessage!),
+          ],
+          if (controller.preInstallationReport != null) ...[
+            const SizedBox(height: 10),
+            _PreInstallationSummary(report: controller.preInstallationReport!),
           ],
           const SizedBox(height: 12),
           const _RiskNotice(),
@@ -1113,7 +1132,8 @@ class _SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Toda atualização é conferida antes de ser instalada.',
+                    'Para agilizar o suporte, exporte o diagnóstico e anexe-o '
+                    'ao relato no GitHub.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: _muted, fontSize: 9),
                   ),
@@ -1437,6 +1457,7 @@ class _ProgressArea extends StatelessWidget {
       LauncherStatus.loadingManifest => 'CARREGANDO',
       LauncherStatus.verifying =>
         '${controller.verifiedFiles}/${controller.verificationTotalFiles}',
+      LauncherStatus.preparing => 'PRÉ-CHECAGEM',
       LauncherStatus.downloading ||
       LauncherStatus.installing ||
       LauncherStatus.updating ||
@@ -1486,7 +1507,8 @@ class _ProgressArea extends StatelessWidget {
           child: LinearProgressIndicator(
             value:
                 controller.status == LauncherStatus.starting ||
-                    controller.status == LauncherStatus.loadingManifest
+                    controller.status == LauncherStatus.loadingManifest ||
+                    controller.status == LauncherStatus.preparing
                 ? null
                 : controller.progress,
             minHeight: 4,
@@ -1527,6 +1549,94 @@ class _ErrorMessage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PreInstallationSummary extends StatelessWidget {
+  const _PreInstallationSummary({required this.report});
+
+  final PreInstallationReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = !report.canProceed
+        ? _coral
+        : report.warningCount > 0
+        ? _yellow
+        : _green;
+    final icon = !report.canProceed
+        ? Icons.block_rounded
+        : report.warningCount > 0
+        ? Icons.admin_panel_settings_outlined
+        : Icons.verified_user_outlined;
+    return ExpansionTile(
+      tilePadding: const EdgeInsets.symmetric(horizontal: 11),
+      childrenPadding: const EdgeInsets.fromLTRB(11, 0, 11, 10),
+      collapsedShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(9),
+        side: BorderSide(color: color.withValues(alpha: .35)),
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(9),
+        side: BorderSide(color: color.withValues(alpha: .35)),
+      ),
+      backgroundColor: color.withValues(alpha: .07),
+      collapsedBackgroundColor: color.withValues(alpha: .07),
+      leading: Icon(icon, color: color, size: 18),
+      title: Text(
+        report.canProceed
+            ? 'PRÉ-INSTALAÇÃO APROVADA'
+            : 'PRÉ-INSTALAÇÃO BLOQUEADA',
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: .65,
+        ),
+      ),
+      subtitle: Text(
+        '${report.passedCount} verificações aprovadas'
+        '${report.warningCount > 0 ? ' • ${report.warningCount} aviso(s)' : ''}',
+        style: const TextStyle(color: _muted, fontSize: 8),
+      ),
+      children: [
+        for (final check in report.checks)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  switch (check.status) {
+                    PreInstallationCheckStatus.passed =>
+                      Icons.check_circle_outline_rounded,
+                    PreInstallationCheckStatus.warning =>
+                      Icons.warning_amber_rounded,
+                    PreInstallationCheckStatus.failed => Icons.cancel_outlined,
+                  },
+                  size: 14,
+                  color: switch (check.status) {
+                    PreInstallationCheckStatus.passed => _green,
+                    PreInstallationCheckStatus.warning => _yellow,
+                    PreInstallationCheckStatus.failed => _coral,
+                  },
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    '${check.label}: ${check.detail}',
+                    style: const TextStyle(
+                      color: Color(0xFFD7E0E8),
+                      fontSize: 8,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1874,6 +1984,23 @@ Future<void> _openGitHubProfile(BuildContext context, String url) async {
   }
 }
 
+Future<void> _openSupportCenter(BuildContext context) async {
+  final opened = await launchUrl(
+    Uri.parse(
+      'https://github.com/MauricioIkeda/'
+      'nte-launcher-traducao-ptbr/issues/new/choose',
+    ),
+    mode: LaunchMode.externalApplication,
+  );
+  if (!opened && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Não foi possível abrir a central de suporte.'),
+      ),
+    );
+  }
+}
+
 Future<bool> _confirmInvalidTranslationLaunch(BuildContext context) async {
   return await showDialog<bool>(
         context: context,
@@ -2035,6 +2162,8 @@ String _statusText(LauncherController controller) {
       controller.currentFile.isEmpty
           ? 'Verificando os arquivos reais da tradução...'
           : 'Verificando ${controller.currentFile}',
+    LauncherStatus.preparing =>
+      'Verificando espaço, permissões e processos do jogo...',
     LauncherStatus.ready =>
       controller.isInstalled
           ? _installationDescription(controller)
@@ -2054,6 +2183,7 @@ IconData _statusIcon(LauncherStatus status) {
     LauncherStatus.starting => Icons.sync_rounded,
     LauncherStatus.loadingManifest => Icons.cloud_download_outlined,
     LauncherStatus.verifying => Icons.fact_check_outlined,
+    LauncherStatus.preparing => Icons.rule_folder_outlined,
     LauncherStatus.ready => Icons.radio_button_checked,
     LauncherStatus.downloading => Icons.downloading_rounded,
     LauncherStatus.installing => Icons.auto_fix_high_rounded,

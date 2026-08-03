@@ -13,7 +13,7 @@ class ElevationService {
     String gameDirectory, {
     required bool allowRestart,
   }) async {
-    if (await _canWrite(gameDirectory)) {
+    if (await canWrite(gameDirectory)) {
       return true;
     }
     if (!allowRestart) {
@@ -48,7 +48,7 @@ class ElevationService {
     exit(0);
   }
 
-  Future<bool> _canWrite(String gameDirectory) async {
+  Future<bool> canWrite(String gameDirectory) async {
     final probe = File(p.join(gameDirectory, '.nte-write-test-$pid'));
     try {
       await probe.writeAsString('test', flush: true);
