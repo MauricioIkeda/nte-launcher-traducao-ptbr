@@ -82,7 +82,6 @@ class LauncherController extends ChangeNotifier {
   bool checkingAppUpdate = false;
   bool updatingLauncher = false;
   bool automaticLauncherUpdates = false;
-  bool officialAutoplay = false;
   int appUpdateReceivedBytes = 0;
   int appUpdateTotalBytes = 0;
   String? errorMessage;
@@ -165,7 +164,6 @@ class LauncherController extends ChangeNotifier {
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
       // Force every existing installation away from the unsafe cold
       // /autoplay path, including users who previously enabled the option.
-      officialAutoplay = false;
       await settings.setOfficialAutoplay(false);
       final savedResolution = savedGameDirectory == null
           ? null
@@ -617,7 +615,7 @@ class LauncherController extends ChangeNotifier {
       final platform = gamePlatform ?? await gamePlatforms.detect(directory);
       gamePlatform = platform;
       await log.info('Abrindo o jogo pela plataforma ${platform.label}.');
-      await gamePlatforms.launch(platform, directory, officialAutoplay: false);
+      await gamePlatforms.launch(platform, directory);
       await log.info('Jogo acionado com sucesso; encerrando o launcher.');
       await Future<void>.delayed(const Duration(milliseconds: 350));
       exit(0);
@@ -651,12 +649,6 @@ class LauncherController extends ChangeNotifier {
   Future<void> setAutomaticLauncherUpdates(bool value) async {
     automaticLauncherUpdates = value;
     await settings.setAutomaticLauncherUpdates(value);
-    _notify();
-  }
-
-  Future<void> setOfficialAutoplay(bool value) async {
-    officialAutoplay = false;
-    await settings.setOfficialAutoplay(false);
     _notify();
   }
 

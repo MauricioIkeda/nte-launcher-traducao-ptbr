@@ -99,11 +99,17 @@ O launcher tenta identificar a origem da instalação:
 - **Epic Games:** lê o manifesto local da Epic e inicia o jogo pelo protocolo
   oficial da loja;
 - **Steam:** localiza o `appmanifest` e usa o protocolo oficial da Steam;
-- **Launcher oficial:** inicia o executável oficial encontrado na pasta do
-  jogo.
+- **Launcher oficial:** abre o executável oficial, espera a verificação de
+  recursos terminar e aciona **Play** automaticamente. Esse fluxo não usa o
+  argumento `/autoplay`, que pode iniciar o cliente cedo demais e deixar as
+  vozes dos personagens indisponíveis.
 
 O botão de jogo funciona como um atalho para a plataforma detectada. O launcher
 não tenta falsificar login, conta, licença ou inicialização da loja.
+
+Na versão oficial, o Windows pode solicitar permissão de administrador uma vez.
+Se o launcher do jogo não confirmar que os recursos estão prontos, o clique
+automático não é executado e a janela permanece aberta para uso manual.
 
 ## Segurança
 

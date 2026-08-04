@@ -7,12 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'installation_service.dart';
 
 typedef ExternalUriLauncher = Future<bool> Function(Uri uri);
-typedef GameExecutableLauncher =
-    Future<void> Function(
-      String executable,
-      List<String> arguments,
-      String workingDirectory,
-    );
+typedef OfficialLauncherAutomation =
+    Future<void> Function(String executable, String gameDirectory);
 
 enum GamePlatform { epicGames, steam, official }
 
@@ -33,18 +29,18 @@ class GamePlatformService {
     Directory? epicManifestDirectory,
     List<Directory>? steamRoots,
     ExternalUriLauncher? externalUriLauncher,
-    GameExecutableLauncher? gameExecutableLauncher,
+    OfficialLauncherAutomation? officialLauncherAutomation,
   }) : _epicManifestDirectory =
            epicManifestDirectory ?? _defaultEpicManifestDirectory(),
        _steamRootsOverride = steamRoots,
        _externalUriLauncher = externalUriLauncher ?? _launchExternalUri,
-       _gameExecutableLauncher =
-           gameExecutableLauncher ?? _launchGameExecutable;
+       _officialLauncherAutomation =
+           officialLauncherAutomation ?? _launchOfficialWhenReady;
 
   final Directory _epicManifestDirectory;
   final List<Directory>? _steamRootsOverride;
   final ExternalUriLauncher _externalUriLauncher;
-  final GameExecutableLauncher _gameExecutableLauncher;
+  final OfficialLauncherAutomation _officialLauncherAutomation;
 
   Future<GamePlatformInfo> detect(String gameDirectory) async {
     final epic = await _detectEpic(gameDirectory);
@@ -67,11 +63,7 @@ class GamePlatformService {
     );
   }
 
-  Future<void> launch(
-    GamePlatformInfo info,
-    String gameDirectory, {
-    bool officialAutoplay = false,
-  }) async {
+  Future<void> launch(GamePlatformInfo info, String gameDirectory) async {
     switch (info.platform) {
       case GamePlatform.epicGames:
       case GamePlatform.steam:
@@ -90,9 +82,12 @@ class GamePlatformService {
             'NTEGlobalLauncher.exe não foi encontrado.',
           );
         }
-        // Never use the official launcher's cold /autoplay path. It can
-        // start HTGame before local resources are ready and remove voices.
-        await _gameExecutableLauncher(executable.path, const [], gameDirectory);
+        // Never use /autoplay: it can start HTGame before local resources are
+        // ready and remove character voices. The elevated helper opens the
+        // official launcher normally, waits for its explicit ready marker and
+        // only then presses Play. If the helper is unavailable, it safely
+        // falls back to opening the official launcher for a manual click.
+        await _officialLauncherAutomation(executable.path, gameDirectory);
     }
   }
 
@@ -293,6 +288,78 @@ class GamePlatformService {
       workingDirectory: workingDirectory,
       mode: ProcessStartMode.detached,
     );
+  }
+
+  static Future<void> _launchOfficialWhenReady(
+    String executable,
+    String gameDirectory,
+  ) async {
+    if (!Platform.isWindows) {
+      await _launchGameExecutable(executable, const [], gameDirectory);
+      return;
+    }
+
+    final internalLauncher = await _findInternalOfficialLauncher(
+      executable,
+      gameDirectory,
+    );
+    if (internalLauncher == null) {
+      await _launchGameExecutable(executable, const [], gameDirectory);
+      return;
+    }
+    final logFile = File(
+      p.join(
+        internalLauncher.parent.path,
+        'UserData',
+        'Log',
+        'NTEGlobalGame.log',
+      ),
+    );
+
+    final result = await Process.run(
+      'powershell.exe',
+      const [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r"$ErrorActionPreference='Stop'; $helperArgs='--official-ready-play --official-launcher-hex=' + $env:NTE_OFFICIAL_LAUNCHER_HEX + ' --internal-launcher-hex=' + $env:NTE_INTERNAL_LAUNCHER_HEX + ' --official-log-hex=' + $env:NTE_OFFICIAL_LOG_HEX; Start-Process -FilePath $env:NTE_TRANSLATION_LAUNCHER -ArgumentList $helperArgs -Verb RunAs -WindowStyle Hidden",
+      ],
+      environment: {
+        ...Platform.environment,
+        'NTE_TRANSLATION_LAUNCHER': Platform.resolvedExecutable,
+        'NTE_OFFICIAL_LAUNCHER_HEX': _hexUtf8(executable),
+        'NTE_INTERNAL_LAUNCHER_HEX': _hexUtf8(internalLauncher.path),
+        'NTE_OFFICIAL_LOG_HEX': _hexUtf8(logFile.path),
+      },
+      runInShell: false,
+    );
+    if (result.exitCode != 0) {
+      throw const GamePlatformException(
+        'A permissÃ£o para abrir o launcher oficial foi cancelada ou recusada.',
+      );
+    }
+  }
+
+  static String _hexUtf8(String value) => utf8
+      .encode(value)
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+
+  static Future<File?> _findInternalOfficialLauncher(
+    String selectedLauncher,
+    String gameDirectory,
+  ) async {
+    final candidates = <File>[
+      File(p.join(gameDirectory, 'NTEGlobal', 'NTEGlobalGame.exe')),
+      File(p.join(gameDirectory, 'NTE Global', 'NTEGlobalGame.exe')),
+      File(p.join(p.dirname(selectedLauncher), 'NTEGlobalGame.exe')),
+    ];
+    for (final candidate in candidates) {
+      if (await candidate.exists()) {
+        return candidate;
+      }
+    }
+    return null;
   }
 }
 

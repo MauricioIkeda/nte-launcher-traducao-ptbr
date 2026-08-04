@@ -575,11 +575,7 @@ class _FakeGamePlatformService extends GamePlatformService {
         launchTarget: p.join(gameDirectory, 'NTEGlobalLauncher.exe'),
       );
   @override
-  Future<void> launch(
-    GamePlatformInfo info,
-    String gameDirectory, {
-    bool officialAutoplay = true,
-  }) async {
+  Future<void> launch(GamePlatformInfo info, String gameDirectory) async {
     launchCount++;
   }
 }
