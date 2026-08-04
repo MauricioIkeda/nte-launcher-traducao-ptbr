@@ -70,7 +70,7 @@ class GamePlatformService {
   Future<void> launch(
     GamePlatformInfo info,
     String gameDirectory, {
-    bool officialAutoplay = true,
+    bool officialAutoplay = false,
   }) async {
     switch (info.platform) {
       case GamePlatform.epicGames:
@@ -90,11 +90,9 @@ class GamePlatformService {
             'NTEGlobalLauncher.exe não foi encontrado.',
           );
         }
-        await _gameExecutableLauncher(
-          executable.path,
-          officialAutoplay ? const ['/autoplay'] : const [],
-          gameDirectory,
-        );
+        // Never use the official launcher's cold /autoplay path. It can
+        // start HTGame before local resources are ready and remove voices.
+        await _gameExecutableLauncher(executable.path, const [], gameDirectory);
     }
   }
 

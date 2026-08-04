@@ -143,7 +143,7 @@ void main() {
     expect(receivedUri, Uri.parse(info.launchTarget));
   });
 
-  test('launches the official launcher with autoplay enabled', () async {
+  test('ignores autoplay and opens the official launcher normally', () async {
     final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
     await launcher.create();
     String? receivedExecutable;
@@ -164,10 +164,10 @@ void main() {
       launchTarget: launcher.path,
     );
 
-    await service.launch(info, gameDirectory.path);
+    await service.launch(info, gameDirectory.path, officialAutoplay: true);
 
     expect(receivedExecutable, launcher.path);
-    expect(receivedArguments, const ['/autoplay']);
+    expect(receivedArguments, isEmpty);
     expect(receivedWorkingDirectory, gameDirectory.path);
   });
 

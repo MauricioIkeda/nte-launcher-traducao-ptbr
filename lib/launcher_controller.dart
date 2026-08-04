@@ -82,7 +82,7 @@ class LauncherController extends ChangeNotifier {
   bool checkingAppUpdate = false;
   bool updatingLauncher = false;
   bool automaticLauncherUpdates = false;
-  bool officialAutoplay = true;
+  bool officialAutoplay = false;
   int appUpdateReceivedBytes = 0;
   int appUpdateTotalBytes = 0;
   String? errorMessage;
@@ -163,7 +163,10 @@ class LauncherController extends ChangeNotifier {
       final savedGameDirectory = await settings.getGameDirectory();
       persistedInstalledVersion = await settings.getInstalledVersion();
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
-      officialAutoplay = await settings.getOfficialAutoplay();
+      // Force every existing installation away from the unsafe cold
+      // /autoplay path, including users who previously enabled the option.
+      officialAutoplay = false;
+      await settings.setOfficialAutoplay(false);
       final savedResolution = savedGameDirectory == null
           ? null
           : await installer.resolveGameDirectory(savedGameDirectory);
@@ -614,11 +617,7 @@ class LauncherController extends ChangeNotifier {
       final platform = gamePlatform ?? await gamePlatforms.detect(directory);
       gamePlatform = platform;
       await log.info('Abrindo o jogo pela plataforma ${platform.label}.');
-      await gamePlatforms.launch(
-        platform,
-        directory,
-        officialAutoplay: officialAutoplay,
-      );
+      await gamePlatforms.launch(platform, directory, officialAutoplay: false);
       await log.info('Jogo acionado com sucesso; encerrando o launcher.');
       await Future<void>.delayed(const Duration(milliseconds: 350));
       exit(0);
@@ -656,8 +655,8 @@ class LauncherController extends ChangeNotifier {
   }
 
   Future<void> setOfficialAutoplay(bool value) async {
-    officialAutoplay = value;
-    await settings.setOfficialAutoplay(value);
+    officialAutoplay = false;
+    await settings.setOfficialAutoplay(false);
     _notify();
   }
 

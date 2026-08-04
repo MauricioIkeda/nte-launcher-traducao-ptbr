@@ -594,10 +594,13 @@ class _UpdatePanel extends StatelessWidget {
             const SizedBox(height: 10),
             _GameDirectorySelectionNotice(controller: controller),
           ],
-          if (controller.gamePlatform?.platform == GamePlatform.official) ...[
-            const SizedBox(height: 10),
-            _OfficialAutoplayToggle(controller: controller),
-          ],
+          // AutoPlay is intentionally hidden for the official client.
+          // Its cold /autoplay path can start the game before local resources
+          // are ready, causing character voices to disappear.
+          // if (controller.gamePlatform?.platform == GamePlatform.official) ...[
+          //   const SizedBox(height: 10),
+          //   _OfficialAutoplayToggle(controller: controller),
+          // ],
           const SizedBox(height: 12),
           _ProgressArea(controller: controller),
           if (controller.errorMessage != null) ...[
@@ -1344,6 +1347,7 @@ class _GameDirectorySelectionNotice extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _OfficialAutoplayToggle extends StatelessWidget {
   const _OfficialAutoplayToggle({required this.controller});
 

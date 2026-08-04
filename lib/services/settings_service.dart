@@ -59,7 +59,7 @@ class SettingsService implements LauncherSettings {
 
   @override
   Future<bool> getOfficialAutoplay() async {
-    return await _preferences.getBool(_officialAutoplayKey) ?? true;
+    return await _preferences.getBool(_officialAutoplayKey) ?? false;
   }
 
   @override
