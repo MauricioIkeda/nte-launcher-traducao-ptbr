@@ -129,6 +129,11 @@ class InstallationService {
         );
       }
       final previousReceipt = receiptRead.receipt;
+      await _protectExistingGameContainers(
+        manifest,
+        gameDirectory,
+        previousReceipt,
+      );
       await storage.transactions.create(recursive: true);
       final transaction = Directory(
         p.join(
@@ -598,6 +603,63 @@ class InstallationService {
       unresolvedPaths: unresolved,
     );
   }
+
+  Future<void> _protectExistingGameContainers(
+    TranslationManifest manifest,
+    String gameDirectory,
+    InstallReceipt? previousReceipt,
+  ) async {
+    final previousByPath = {
+      for (final entry
+          in previousReceipt?.files ?? const <InstalledFileReceipt>[])
+        _portablePathKey(entry.relativePath): entry,
+    };
+    final collisions = <String>[];
+    for (final asset in manifest.files) {
+      final relative = safePaths.normalizeRelative(asset.relativeDestination);
+      if (!_isGameContainer(relative)) {
+        continue;
+      }
+      final previous = previousByPath[_portablePathKey(relative)];
+      if (previous != null) {
+        if (previous.originalExisted) {
+          collisions.add(relative);
+        }
+        continue;
+      }
+      final destination = await safePaths.resolveFile(gameDirectory, relative);
+      if (await destination.exists()) {
+        collisions.add(relative);
+      }
+    }
+    if (collisions.isEmpty) {
+      return;
+    }
+    throw InstallationException(
+      'A instalação foi bloqueada para proteger arquivos originais do jogo. '
+      'Os seguintes contêineres já pertenciam a esta instalação: '
+      '${collisions.join(', ')}. '
+      'Se a tradução já estiver instalada, use "Remover tradução" para '
+      'restaurar os originais. Caso contrário, exporte o diagnóstico e não '
+      'apague esses arquivos manualmente.',
+    );
+  }
+
+  static bool _isGameContainer(String relativePath) {
+    final normalized = _portablePathKey(relativePath);
+    if (!normalized.startsWith(
+      'client/windowsnoeditor/ht/content/paks/',
+    )) {
+      return false;
+    }
+    return const {'.pak', '.utoc', '.ucas'}.contains(
+      p.posix.extension(normalized),
+    );
+  }
+
+  static String _portablePathKey(String relativePath) => p.posix
+      .normalize(relativePath.replaceAll('\\', '/'))
+      .toLowerCase();
 
   Future<void> _rollback(
     Directory transaction,
