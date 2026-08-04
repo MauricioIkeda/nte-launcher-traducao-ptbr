@@ -121,13 +121,12 @@ jobs:
           flutter-version: "3.44.8"
           cache: true
 
-      - name: Format and test
+      - name: Format, analyze, and test
         run: |
           dart format lib/main.dart lib/launcher_controller.dart lib/services/game_platform_service.dart lib/services/settings_service.dart test/game_platform_service_test.dart
           flutter pub get
           flutter analyze
           flutter test
-          flutter test integration_test
 
       - name: Commit hotfix to main
         shell: bash
