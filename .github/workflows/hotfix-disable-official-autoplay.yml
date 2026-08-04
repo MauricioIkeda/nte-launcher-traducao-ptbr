@@ -51,6 +51,11 @@ jobs:
               """          if (controller.gamePlatform?.platform == GamePlatform.official) ...[\n            const SizedBox(height: 10),\n            _OfficialAutoplayToggle(controller: controller),\n          ],\n""",
               """          // AutoPlay is intentionally hidden for the official client.\n          // Its cold /autoplay path can start the game before local resources\n          // are ready, causing character voices to disappear.\n          // if (controller.gamePlatform?.platform == GamePlatform.official) ...[\n          //   const SizedBox(height: 10),\n          //   _OfficialAutoplayToggle(controller: controller),\n          // ],\n""",
           )
+          replace_once(
+              "lib/main.dart",
+              "class _OfficialAutoplayToggle extends StatelessWidget {\n",
+              "// ignore: unused_element\nclass _OfficialAutoplayToggle extends StatelessWidget {\n",
+          )
 
           replace_once(
               "lib/launcher_controller.dart",
