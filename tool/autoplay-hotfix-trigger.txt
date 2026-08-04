@@ -1,2 +1,3 @@
 Temporary trigger for the official launcher autoplay hotfix workflow.
 Retry after suppressing the intentionally hidden widget lint.
+Integration tests are delegated to the official Windows release workflow.
