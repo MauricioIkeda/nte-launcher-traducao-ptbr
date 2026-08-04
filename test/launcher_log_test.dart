@@ -21,4 +21,25 @@ void main() {
     expect(await File('${file.path}.2').exists(), isTrue);
     expect(await File('${file.path}.3').exists(), isFalse);
   });
+
+  test('exports bounded recent logs and redacts common secrets', () async {
+    final sandbox = await Directory.systemTemp.createTemp('nte-log-export-');
+    addTearDown(() => sandbox.delete(recursive: true));
+    final file = File(p.join(sandbox.path, 'launcher.log'));
+    final log = LauncherLog(file, maxBytes: 1000, retainedFiles: 2);
+
+    await log.info('tentativa anterior');
+    await log.error('api_key=segredo-que-nao-pode-sair');
+
+    final excerpts = await log.diagnosticExcerpts(maxTotalBytes: 4096);
+
+    expect(excerpts, hasLength(1));
+    expect(excerpts.single['file'], 'launcher.log');
+    expect(excerpts.single['content'], contains('tentativa anterior'));
+    expect(excerpts.single['content'], contains('api_key=[REDACTED]'));
+    expect(
+      excerpts.single['content'],
+      isNot(contains('segredo-que-nao-pode-sair')),
+    );
+  });
 }

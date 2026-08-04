@@ -26,6 +26,44 @@ class LauncherLog {
     return _write('ERROR', details.toString());
   }
 
+  Future<List<Map<String, Object>>> diagnosticExcerpts({
+    int maxTotalBytes = 256 * 1024,
+  }) async {
+    await _pending;
+    if (maxTotalBytes <= 0) return const [];
+
+    var remaining = maxTotalBytes;
+    final excerpts = <Map<String, Object>>[];
+    for (var index = 0; index <= retainedFiles && remaining > 0; index++) {
+      final source = File(index == 0 ? file.path : '${file.path}.$index');
+      if (!await source.exists()) continue;
+
+      try {
+        final length = await source.length();
+        final readLength = length < remaining ? length : remaining;
+        final handle = await source.open();
+        try {
+          await handle.setPosition(length - readLength);
+          final bytes = await handle.read(readLength);
+          final content = _redactSensitiveValues(
+            utf8.decode(bytes, allowMalformed: true),
+          );
+          excerpts.insert(0, {
+            'file': _fileName(source.path),
+            'content': content,
+            'truncated': readLength < length,
+          });
+          remaining -= readLength;
+        } finally {
+          await handle.close();
+        }
+      } catch (_) {
+        // A partially unreadable log must not prevent diagnostics export.
+      }
+    }
+    return excerpts;
+  }
+
   Future<void> _write(String level, String message) {
     _pending = _pending.then((_) async {
       try {
@@ -56,5 +94,25 @@ class LauncherLog {
       if (await destination.exists()) await destination.delete();
       await source.rename(destination.path);
     }
+  }
+
+  static String _fileName(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    return normalized.substring(normalized.lastIndexOf('/') + 1);
+  }
+
+  static String _redactSensitiveValues(String value) {
+    var result = value.replaceAll(
+      RegExp(r'AIza[0-9A-Za-z_-]{20,}'),
+      '[REDACTED_API_KEY]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'((?:api[_-]?key|access[_-]?token|authorization)[=: ]+)([^\s&]+)',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}[REDACTED]',
+    );
+    return result;
   }
 }

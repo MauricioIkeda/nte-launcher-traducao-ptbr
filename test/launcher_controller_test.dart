@@ -115,8 +115,15 @@ void main() {
     final diagnostics = await file.readAsString();
     final decoded = jsonDecode(diagnostics) as Map<String, dynamic>;
 
+    expect(decoded['schemaVersion'], 2);
     expect(diagnostics, contains('verificationStatus'));
     expect(decoded['gameDirectory'], game.path);
+    expect(decoded['verification'], isA<Map<String, dynamic>>());
+    expect(decoded['recentLogs'], isA<List<dynamic>>());
+    expect(
+      (decoded['recentLogs'] as List<dynamic>).join('\n'),
+      contains('Verifica'),
+    );
     expect(diagnostics, isNot(contains('token')));
     expect(diagnostics, isNot(contains('api_key')));
   });

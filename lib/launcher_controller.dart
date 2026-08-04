@@ -718,8 +718,9 @@ class LauncherController extends ChangeNotifier {
 
   Future<File> exportDiagnostics({bool reveal = true}) async {
     await paths.diagnostics.create(recursive: true);
+    final recentLogs = await log.diagnosticExcerpts();
     final payload = {
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'launcherVersion': appVersion,
       'status': status.name,
@@ -729,6 +730,17 @@ class LauncherController extends ChangeNotifier {
       'availableTranslationVersion': manifest?.translationVersion,
       'installedTranslationVersion': installedVersion,
       'verificationStatus': verification.status.name,
+      'verification': {
+        'status': verification.status.name,
+        'detectedVersion': verification.detectedVersion,
+        'receiptVersion': verification.receiptVersion,
+        'validFiles': verification.validFiles,
+        'missingFiles': verification.missingFiles,
+        'modifiedFiles': verification.modifiedFiles,
+        'unverifiableFiles': verification.unverifiableFiles,
+        'managedDirectory': verification.managedDirectory,
+        'error': verification.error?.toString(),
+      },
       'offlineMode': offlineMode,
       'preInstallationChecks': [
         for (final check in preInstallationReport?.checks ?? const [])
@@ -739,6 +751,7 @@ class LauncherController extends ChangeNotifier {
         paths.logFile.path,
         for (var index = 1; index <= 5; index++) '${paths.logFile.path}.$index',
       ],
+      'recentLogs': recentLogs,
     };
     final temporary = File('${paths.diagnosticFile.path}.tmp');
     await temporary.writeAsString(
