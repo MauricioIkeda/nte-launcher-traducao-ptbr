@@ -1,13 +1,14 @@
-# Registered on main; this update intentionally triggers the one-shot workflow.
-# Merged through GitHub so the push event is emitted by the platform.
+# One-shot workflow used to apply, validate, and publish the autoplay hotfix.
 name: Apply official autoplay hotfix
 
 on:
-  push:
+  pull_request:
     branches:
       - main
-    paths:
-      - ".github/workflows/hotfix-disable-official-autoplay.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
@@ -19,13 +20,15 @@ concurrency:
 
 jobs:
   hotfix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-      - name: Check out repository
+      - name: Check out main
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Apply autoplay safety changes
