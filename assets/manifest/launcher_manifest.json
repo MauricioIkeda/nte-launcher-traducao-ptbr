@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.3.1",
-  "publishedAt": "2026-08-04T02:29:06Z",
+  "version": "1.3.2",
+  "publishedAt": "2026-08-04T06:59:58Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.1/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19502888,
-    "sha256": "768642cf8df58ca70109174abb854bd409abe2023e15b0bdcc18e96a236bdd44"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.2/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19492019,
+    "sha256": "93fd91b71a2cdc3734c70b7adb955ac5d9afd3d77de0b313d634d532ffe7fd65"
   },
-  "releaseNotes": "Corrige a detecção das pastas do NTE e instala sempre na raiz correta, inclusive quando o launcher está em NTEGlobal.",
+  "releaseNotes": "Desativa o AutoPlay no cliente oficial para preservar as vozes e abre o launcher para o clique manual em Play.",
   "mandatory": false
 }
