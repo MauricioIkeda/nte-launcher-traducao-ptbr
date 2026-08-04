@@ -1,0 +1,1 @@
+Temporary trigger for the official launcher autoplay hotfix workflow.
