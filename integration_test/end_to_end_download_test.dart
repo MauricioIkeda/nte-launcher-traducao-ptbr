@@ -74,6 +74,19 @@ void main() {
       await File(
         p.join(game.path, InstallationService.gameExecutable),
       ).writeAsBytes(const [77, 90]);
+      final clientExecutable = File(
+        p.join(
+          game.path,
+          'Client',
+          'WindowsNoEditor',
+          'HT',
+          'Binaries',
+          'Win64',
+          'HTGame.exe',
+        ),
+      );
+      await clientExecutable.parent.create(recursive: true);
+      await clientExecutable.writeAsBytes(const [77, 90]);
 
       final versionDll = File(
         p.join(

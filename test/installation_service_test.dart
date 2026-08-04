@@ -45,6 +45,36 @@ void main() {
     stage = await createStage(sandbox, manifest, contents);
   });
 
+  test(
+    'nested launcher selection installs into the real client root',
+    () async {
+      await File(
+        p.join(game.path, InstallationService.gameExecutable),
+      ).delete();
+      final nested = Directory(p.join(game.path, 'NTEGlobal'));
+      await nested.create();
+      await File(
+        p.join(nested.path, InstallationService.gameExecutable),
+      ).writeAsBytes(const [77, 90]);
+
+      await service.install(manifest, stage, nested.path);
+
+      expect(
+        File(
+          p.join(game.path, manifest.files.first.relativeDestination),
+        ).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(
+          p.join(nested.path, manifest.files.first.relativeDestination),
+        ).existsSync(),
+        isFalse,
+      );
+      expect((await receipts.read(game.path)).receipt, isNotNull);
+    },
+  );
+
   tearDown(() => sandbox.delete(recursive: true));
 
   test(

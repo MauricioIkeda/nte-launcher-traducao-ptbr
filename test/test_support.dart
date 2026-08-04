@@ -46,6 +46,19 @@ Future<Directory> createGame(Directory root, String name) async {
   final game = Directory(p.join(root.path, name));
   await game.create(recursive: true);
   await File(p.join(game.path, 'NTEGlobalLauncher.exe')).writeAsBytes([77, 90]);
+  final clientExecutable = File(
+    p.join(
+      game.path,
+      'Client',
+      'WindowsNoEditor',
+      'HT',
+      'Binaries',
+      'Win64',
+      'HTGame.exe',
+    ),
+  );
+  await clientExecutable.parent.create(recursive: true);
+  await clientExecutable.writeAsBytes([77, 90]);
   return game;
 }
 

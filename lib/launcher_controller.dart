@@ -160,16 +160,27 @@ class LauncherController extends ChangeNotifier {
     verification = const TranslationVerificationResult.checking();
     _notify();
     try {
-      gameDirectory = await settings.getGameDirectory();
+      final savedGameDirectory = await settings.getGameDirectory();
       persistedInstalledVersion = await settings.getInstalledVersion();
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
       officialAutoplay = await settings.getOfficialAutoplay();
-      if (gameDirectory == null ||
-          !await installer.isValidGameDirectory(gameDirectory!)) {
+      final savedResolution = savedGameDirectory == null
+          ? null
+          : await installer.resolveGameDirectory(savedGameDirectory);
+      if (savedResolution != null) {
+        gameDirectory = savedResolution.gameDirectory;
+        if (savedResolution.wasAdjusted) {
+          await settings.setGameDirectory(gameDirectory!);
+          await log.info(
+            'Pasta do jogo normalizada de $savedGameDirectory para '
+            '$gameDirectory.',
+          );
+        }
+      } else {
         const defaultPath = r'C:\Program Files\Neverness To Everness';
-        gameDirectory = await installer.isValidGameDirectory(defaultPath)
-            ? defaultPath
-            : null;
+        gameDirectory = (await installer.resolveGameDirectory(
+          defaultPath,
+        ))?.gameDirectory;
       }
       if (!_isCurrent(operation)) {
         return;
@@ -282,9 +293,9 @@ class LauncherController extends ChangeNotifier {
     gameDirectorySelectionError = null;
     _notify();
 
-    bool isValid;
+    GameDirectoryResolution? resolution;
     try {
-      isValid = await installer.isValidGameDirectory(candidate);
+      resolution = await installer.resolveGameDirectory(candidate);
     } catch (error, stackTrace) {
       if (_isCurrent(operation)) {
         validatingGameDirectory = false;
@@ -303,10 +314,11 @@ class LauncherController extends ChangeNotifier {
       return;
     }
 
-    if (!isValid) {
+    if (resolution == null) {
       validatingGameDirectory = false;
       gameDirectorySelectionError =
-          'A pasta selecionada não contém NTEGlobalLauncher.exe.';
+          'Não foi possível localizar uma instalação completa do NTE. '
+          'Selecione a pasta principal do jogo ou a pasta NTEGlobal.';
       _notify();
       return;
     }
@@ -319,10 +331,15 @@ class LauncherController extends ChangeNotifier {
     gamePlatform = null;
     errorMessage = null;
     status = LauncherStatus.verifying;
-    gameDirectory = candidate;
+    gameDirectory = resolution.gameDirectory;
     _notify();
 
-    await settings.setGameDirectory(candidate);
+    await settings.setGameDirectory(gameDirectory!);
+    if (resolution.wasAdjusted) {
+      await log.info(
+        'Pasta selecionada $candidate normalizada para $gameDirectory.',
+      );
+    }
     await _detectGamePlatform(operation);
     if (loadedManifest != null && _isCurrent(operation)) {
       await _verifyCurrent(operation);

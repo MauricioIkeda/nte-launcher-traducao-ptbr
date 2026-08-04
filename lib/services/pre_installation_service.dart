@@ -43,8 +43,8 @@ class PreInstallationService {
         id: 'game-directory',
         label: 'Pasta do jogo',
         detail: validDirectory
-            ? 'NTEGlobalLauncher.exe foi encontrado.'
-            : 'A pasta não contém NTEGlobalLauncher.exe.',
+            ? 'Launcher e estrutura do cliente NTE foram encontrados.'
+            : 'A pasta não contém uma instalação completa do NTE.',
         status: validDirectory
             ? PreInstallationCheckStatus.passed
             : PreInstallationCheckStatus.failed,

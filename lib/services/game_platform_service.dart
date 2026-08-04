@@ -57,10 +57,13 @@ class GamePlatformService {
       return steam;
     }
 
+    final launcher = await InstallationService.findGameLauncher(gameDirectory);
     return GamePlatformInfo(
       platform: GamePlatform.official,
       label: 'LAUNCHER OFICIAL',
-      launchTarget: p.join(gameDirectory, InstallationService.gameExecutable),
+      launchTarget:
+          launcher?.path ??
+          p.join(gameDirectory, InstallationService.gameExecutable),
     );
   }
 
