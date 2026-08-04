@@ -52,6 +52,11 @@
 5. Confirme ou selecione a pasta do jogo.
 6. Clique em **Instalar tradução**.
 
+O launcher aceita tanto a pasta principal da instalação quanto as subpastas
+`NTEGlobal` e `NTE Global`. Ele confirma a árvore real do cliente em
+`Client\WindowsNoEditor\HT` e normaliza automaticamente o caminho antes de
+instalar, reparar ou remover a tradução.
+
 Quando a tradução estiver atualizada, a ação principal muda para **Jogar pela
 Epic Games**, **Jogar pela Steam** ou **Jogar pelo launcher oficial**, conforme
 a instalação detectada.
@@ -218,8 +223,11 @@ C:\flutter\bin\flutter.bat pub get
 C:\flutter\bin\flutter.bat run -d windows
 ```
 
-Para simular uma instalação do jogo, crie uma pasta vazia, coloque nela um
-arquivo chamado `NTEGlobalLauncher.exe` e selecione essa pasta na interface.
+Para simular uma instalação do jogo, crie `NTEGlobalLauncher.exe` na raiz (ou
+em `NTEGlobal`) e crie também
+`Client\WindowsNoEditor\HT\Binaries\Win64\HTGame.exe`. A validação exige os
+dois marcadores para não confundir uma pasta isolada do launcher com a raiz do
+cliente.
 
 Validação do projeto:
 
@@ -233,7 +241,7 @@ python -m unittest discover -s tool -p "test_*.py"
 
 ```powershell
 C:\flutter\bin\flutter.bat build windows --release `
-  --build-name 1.3.0 --build-number 12
+  --build-name 1.3.1 --build-number 13
 ```
 
 O executável será criado em:
@@ -246,7 +254,7 @@ build/windows/x64/runner/Release/NTE-Launcher-Traducao-PTBR.exe
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" `
-  "/DMyAppVersion=1.3.0" `
+  "/DMyAppVersion=1.3.1" `
   "installer\NTE-Launcher-Traducao-PTBR.iss"
 ```
 
@@ -282,8 +290,8 @@ Release e atualiza o manifesto usado pelo atualizador automático.
 Também é possível publicar por tag:
 
 ```powershell
-git tag v1.3.0
-git push origin v1.3.0
+git tag v1.3.1
+git push origin v1.3.1
 ```
 
 ## Manifestos remotos

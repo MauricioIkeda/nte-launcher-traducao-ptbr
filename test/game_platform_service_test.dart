@@ -99,6 +99,25 @@ void main() {
     );
   });
 
+  test('finds the official launcher inside NTEGlobal', () async {
+    final emptyEpic = Directory(p.join(sandbox.path, 'epic-manifests'));
+    await emptyEpic.create();
+    final launcher = File(
+      p.join(gameDirectory.path, 'NTEGlobal', 'NTEGlobalLauncher.exe'),
+    );
+    await launcher.parent.create(recursive: true);
+    await launcher.create();
+    final service = GamePlatformService(
+      epicManifestDirectory: emptyEpic,
+      steamRoots: const [],
+    );
+
+    final result = await service.detect(gameDirectory.path);
+
+    expect(result.platform, GamePlatform.official);
+    expect(result.launchTarget, launcher.path);
+  });
+
   test('passes store protocols to the operating system URL handler', () async {
     final emptyEpic = Directory(p.join(sandbox.path, 'epic-manifests'));
     await emptyEpic.create();

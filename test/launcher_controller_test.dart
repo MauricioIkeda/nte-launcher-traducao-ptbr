@@ -84,6 +84,25 @@ void main() {
     expect(statuses.last, LauncherStatus.ready);
   });
 
+  test('normalizes a previously saved nested launcher directory', () async {
+    final nested = Directory(p.join(game.path, 'NTEGlobal'));
+    await nested.create();
+    await File(
+      p.join(nested.path, 'NTEGlobalLauncher.exe'),
+    ).writeAsBytes(const [77, 90]);
+    final settings = _FakeSettings(nested.path);
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: settings,
+    );
+
+    await controller.initialize();
+
+    expect(controller.gameDirectory, p.normalize(p.absolute(game.path)));
+    expect(settings.gameDirectory, p.normalize(p.absolute(game.path)));
+  });
+
   test('exports diagnostics without secrets or remote writes', () async {
     final controller = harness.controller(
       manifest: testManifest(contents: contents),
@@ -181,7 +200,7 @@ void main() {
       expect(controller.rejectedGameDirectory, invalid.path);
       expect(
         controller.gameDirectorySelectionError,
-        contains('NTEGlobalLauncher.exe'),
+        contains('instalação completa do NTE'),
       );
       expect(controller.validatingGameDirectory, isFalse);
     },

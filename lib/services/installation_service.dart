@@ -26,6 +26,16 @@ class InstallationService {
            ReceiptRepository(paths, log, safePaths ?? SafePathService());
 
   static const gameExecutable = 'NTEGlobalLauncher.exe';
+  static const alternateGameExecutable = 'NTE Global Launcher.exe';
+  static const _launcherDirectories = ['', 'NTEGlobal', 'NTE Global'];
+  static const _clientExecutableSegments = [
+    'Client',
+    'WindowsNoEditor',
+    'HT',
+    'Binaries',
+    'Win64',
+    'HTGame.exe',
+  ];
 
   final AppPaths paths;
   final LauncherLog log;
@@ -37,11 +47,63 @@ class InstallationService {
   Future<bool> hasReceipt(String gameDirectory) async =>
       (await receipts.read(gameDirectory)).receipt != null;
 
-  Future<bool> isValidGameDirectory(String path) async {
-    if (path.trim().isEmpty) {
-      return false;
+  Future<bool> isValidGameDirectory(String path) async =>
+      await resolveGameDirectory(path) != null;
+
+  Future<GameDirectoryResolution?> resolveGameDirectory(String path) async {
+    final selected = path.trim();
+    if (selected.isEmpty) {
+      return null;
     }
-    return File(p.join(path, gameExecutable)).exists();
+
+    final selectedDirectory = p.normalize(p.absolute(selected));
+    final candidates = <String>[selectedDirectory];
+    final compactName = p
+        .basename(selectedDirectory)
+        .replaceAll(RegExp(r'[\s_-]+'), '')
+        .toLowerCase();
+    if (compactName == 'nteglobal') {
+      candidates.add(p.dirname(selectedDirectory));
+    }
+
+    for (final candidate in candidates.toSet()) {
+      final clientExecutable = File(
+        p.joinAll([candidate, ..._clientExecutableSegments]),
+      );
+      if (!await clientExecutable.exists()) {
+        continue;
+      }
+      final launcher = await findGameLauncher(candidate);
+      if (launcher != null) {
+        return GameDirectoryResolution(
+          gameDirectory: candidate,
+          launcherExecutable: launcher.path,
+          selectedDirectory: selectedDirectory,
+        );
+      }
+    }
+    return null;
+  }
+
+  static Future<File?> findGameLauncher(String gameDirectory) async {
+    for (final directory in _launcherDirectories) {
+      for (final executable in const [
+        gameExecutable,
+        alternateGameExecutable,
+      ]) {
+        final candidate = File(
+          p.joinAll([
+            gameDirectory,
+            if (directory.isNotEmpty) directory,
+            executable,
+          ]),
+        );
+        if (await candidate.exists()) {
+          return candidate;
+        }
+      }
+    }
+    return null;
   }
 
   Future<void> install(
@@ -49,11 +111,13 @@ class InstallationService {
     Directory stage,
     String gameDirectory,
   ) async {
-    if (!await isValidGameDirectory(gameDirectory)) {
+    final resolved = await resolveGameDirectory(gameDirectory);
+    if (resolved == null) {
       throw const InstallationException(
-        'NTEGlobalLauncher.exe não foi encontrado na pasta selecionada.',
+        'A instalação completa do NTE não foi encontrada na pasta selecionada.',
       );
     }
+    gameDirectory = resolved.gameDirectory;
     final storage = await receipts.storageFor(gameDirectory);
     final operationLock = await _acquireOperationLock(storage);
     try {
@@ -766,6 +830,20 @@ class _TransactionEntry {
     'relativePath': relativePath,
     'destinationExisted': destinationExisted,
   };
+}
+
+class GameDirectoryResolution {
+  const GameDirectoryResolution({
+    required this.gameDirectory,
+    required this.launcherExecutable,
+    required this.selectedDirectory,
+  });
+
+  final String gameDirectory;
+  final String launcherExecutable;
+  final String selectedDirectory;
+
+  bool get wasAdjusted => !p.equals(gameDirectory, selectedDirectory);
 }
 
 class InstallationException implements Exception {

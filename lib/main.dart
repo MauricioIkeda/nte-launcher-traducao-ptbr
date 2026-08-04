@@ -1188,7 +1188,7 @@ class _FolderField extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       controller.gameDirectory ??
-                          'Clique para localizar NTEGlobalLauncher.exe',
+                          'Clique para localizar a instalação do NTE',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1231,8 +1231,8 @@ class _GameDirectorySelectionNotice extends StatelessWidget {
               ? 'Conferindo a pasta selecionada...'
               : 'Conferindo $candidate'
         : activeDirectory == null
-        ? 'Escolha a pasta principal do NTE, onde está '
-              'NTEGlobalLauncher.exe.'
+        ? 'Escolha a pasta principal do NTE ou a subpasta NTEGlobal. '
+              'O launcher localizará automaticamente a raiz correta.'
         : 'A localização ativa não foi alterada e continua sendo '
               '$activeDirectory';
 
