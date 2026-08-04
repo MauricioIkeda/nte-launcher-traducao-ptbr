@@ -1,3 +1,4 @@
+# Registered on main; this update intentionally triggers the one-shot workflow.
 name: Apply official autoplay hotfix
 
 on:
