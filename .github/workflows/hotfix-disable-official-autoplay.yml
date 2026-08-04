@@ -1,4 +1,5 @@
 # Registered on main; this update intentionally triggers the one-shot workflow.
+# Merged through GitHub so the push event is emitted by the platform.
 name: Apply official autoplay hotfix
 
 on:
