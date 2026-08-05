@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.3.4",
-  "publishedAt": "2026-08-05T06:36:44Z",
+  "version": "1.3.5",
+  "publishedAt": "2026-08-05T14:59:14Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.4/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19524340,
-    "sha256": "fd15ddd6de0edeb0a2935d8836b764f3b579276e29d63242716880c4b5d953b8"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.5/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19529178,
+    "sha256": "efc3914167f1b37acaf2245a1a390a031839df43e922dc4bf41575f0e495b985"
   },
-  "releaseNotes": "Novo diagnóstico completo em um único arquivo, com ambiente, plataforma, instalação, histórico e logs incorporados.",
+  "releaseNotes": "Play automático compatível com Wine e Proton, confirmação real da inicialização e correção de abertura fora da pasta instalada.",
   "mandatory": true
 }
