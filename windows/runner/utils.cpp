@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <iostream>
+#include <vector>
 
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
@@ -39,6 +40,19 @@ std::vector<std::string> GetCommandLineArguments() {
   ::LocalFree(argv);
 
   return command_line_arguments;
+}
+
+std::wstring GetExecutableDirectory() {
+  std::vector<wchar_t> buffer(32768, L'\0');
+  const DWORD copied = ::GetModuleFileNameW(
+      nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+  if (copied == 0 || copied >= buffer.size()) {
+    return {};
+  }
+  std::wstring path(buffer.data(), copied);
+  const size_t separator = path.find_last_of(L"\\/");
+  return separator == std::wstring::npos ? std::wstring{}
+                                         : path.substr(0, separator);
 }
 
 std::string Utf8FromUtf16(const wchar_t* utf16_string) {

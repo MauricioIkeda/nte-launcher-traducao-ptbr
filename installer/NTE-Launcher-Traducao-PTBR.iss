@@ -57,8 +57,8 @@ Type: files; Name: "{group}\{#MyLegacyAppName}.lnk"
 Type: files; Name: "{autodesktop}\{#MyLegacyAppName}.lnk"
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Abrir {#MyAppName}"; Flags: nowait postinstall
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "Abrir {#MyAppName}"; Flags: nowait postinstall
