@@ -45,7 +45,7 @@ class LauncherLog {
         try {
           await handle.setPosition(length - readLength);
           final bytes = await handle.read(readLength);
-          final content = _redactSensitiveValues(
+          final content = redactSensitiveValues(
             utf8.decode(bytes, allowMalformed: true),
           );
           excerpts.insert(0, {
@@ -101,14 +101,21 @@ class LauncherLog {
     return normalized.substring(normalized.lastIndexOf('/') + 1);
   }
 
-  static String _redactSensitiveValues(String value) {
+  static String redactSensitiveValues(String value) {
     var result = value.replaceAll(
       RegExp(r'AIza[0-9A-Za-z_-]{20,}'),
       '[REDACTED_API_KEY]',
     );
     result = result.replaceAllMapped(
       RegExp(
-        r'((?:api[_-]?key|access[_-]?token|authorization)[=: ]+)([^\s&]+)',
+        r'''(\b(?:authorization|proxy-authorization)\b["']?\s*[:=]\s*["']?)(?:Bearer\s+)?([^"'\s,;}]+)''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}[REDACTED]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'''(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|client[_-]?secret|session[_-]?(?:id|token)|cookie|set-cookie)\b["']?\s*[:=]\s*["']?)([^"'\s&,;}]+)''',
         caseSensitive: false,
       ),
       (match) => '${match.group(1)}[REDACTED]',

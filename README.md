@@ -36,9 +36,9 @@
 - verifica pasta, jogo aberto, permissões e espaço livre antes do download;
 - preserva os arquivos originais antes de aplicar a tradução;
 - usa instalação atômica e rollback quando uma operação falha;
-- mantém um log técnico local para facilitar diagnósticos;
-- rotaciona o log automaticamente e permite exportar um diagnóstico sem
-  credenciais pela tela de configurações;
+- mantém logs técnicos locais com rotação e limite de tamanho;
+- gera um único diagnóstico autocontido com sistema, Wine/Proton, plataforma,
+  instalação, recibo, executáveis, histórico e trechos de logs protegidos;
 - verifica atualizações do próprio launcher;
 - oferece atualização automática opcional, desativada por padrão;
 - possui instalador, atalhos e desinstalador nativos para Windows.
@@ -325,8 +325,9 @@ Os endereços podem ser substituídos em builds personalizados com
 
 O botão **Suporte**, sempre visível na barra superior do launcher, abre a
 central com formulários separados para bugs, problemas de instalação, erros de
-tradução e sugestões. Antes de relatar uma falha técnica, use **Exportar
-diagnóstico** e anexe o arquivo depois de revisá-lo.
+tradução e sugestões. Antes de relatar uma falha técnica, use **Gerar
+diagnóstico completo** e anexe o único arquivo `diagnostico.json` depois de
+revisá-lo. Não é necessário localizar ou enviar os logs internos separadamente.
 
 Consulte o [guia de suporte](SUPPORT.md). Vulnerabilidades devem ser enviadas
 de forma privada pela aba **Security**, conforme a [política de

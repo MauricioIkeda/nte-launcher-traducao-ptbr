@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <thread>
 
@@ -16,6 +17,51 @@ constexpr char kStartedMarker[] = "GameClientAgent::launchGame]  start game";
 constexpr char kLauncherPrefix[] = "--official-launcher-hex=";
 constexpr char kInternalPrefix[] = "--internal-launcher-hex=";
 constexpr char kLogPrefix[] = "--official-log-hex=";
+
+void WriteAutomationResult(int code, const char* stage) {
+  wchar_t temporary_path[MAX_PATH + 1] = {};
+  const DWORD copied = ::GetTempPathW(MAX_PATH, temporary_path);
+  if (copied == 0 || copied > MAX_PATH) {
+    return;
+  }
+  std::wstring directory(temporary_path);
+  directory += L"NTE-Translation-Launcher";
+  if (!::CreateDirectoryW(directory.c_str(), nullptr) &&
+      ::GetLastError() != ERROR_ALREADY_EXISTS) {
+    return;
+  }
+  const std::wstring result_path =
+      directory + L"\\official-launch-result.json";
+  SYSTEMTIME time = {};
+  ::GetSystemTime(&time);
+  char payload[512] = {};
+  const int length = std::snprintf(
+      payload, sizeof(payload),
+      "{\n  \"schemaVersion\": 1,\n  \"recordedAt\": "
+      "\"%04u-%02u-%02uT%02u:%02u:%02u.%03uZ\",\n  \"processId\": "
+      "%lu,\n  \"exitCode\": %d,\n  \"stage\": \"%s\"\n}\n",
+      time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+      time.wSecond, time.wMilliseconds,
+      static_cast<unsigned long>(::GetCurrentProcessId()), code, stage);
+  if (length <= 0 || length >= static_cast<int>(sizeof(payload))) {
+    return;
+  }
+  HANDLE file = ::CreateFileW(result_path.c_str(), GENERIC_WRITE,
+                              FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    return;
+  }
+  DWORD written = 0;
+  ::WriteFile(file, payload, static_cast<DWORD>(length), &written, nullptr);
+  ::FlushFileBuffers(file);
+  ::CloseHandle(file);
+}
+
+int FinishAutomation(int code, const char* stage) {
+  WriteAutomationResult(code, stage);
+  return code;
+}
 
 int HexDigit(char value) {
   if (value >= '0' && value <= '9') {
@@ -270,6 +316,7 @@ bool LaunchOfficialLauncher(const std::wstring& launcher) {
 
 int RunOfficialLauncherAutomation(
     const std::vector<std::string>& command_line_arguments) {
+  WriteAutomationResult(-1, "started");
   const std::wstring launcher =
       FullPath(ReadEncodedPath(command_line_arguments, kLauncherPrefix));
   const std::wstring internal =
@@ -278,12 +325,12 @@ int RunOfficialLauncherAutomation(
       FullPath(ReadEncodedPath(command_line_arguments, kLogPrefix));
   if (launcher.empty() || internal.empty() || log.empty() ||
       !HasExpectedPaths(launcher, internal, log)) {
-    return 10;
+    return FinishAutomation(10, "invalid_paths_or_arguments");
   }
 
   uint64_t log_offset = FileSizeOrZero(log);
   if (!LaunchOfficialLauncher(launcher)) {
-    return 11;
+    return FinishAutomation(11, "official_launcher_start_failed");
   }
 
   std::string appended_log;
@@ -304,10 +351,10 @@ int RunOfficialLauncherAutomation(
 
   if (launcher_window == nullptr ||
       appended_log.find(kReadyMarker) == std::string::npos) {
-    return 12;
+    return FinishAutomation(12, "ready_marker_or_window_timeout");
   }
   if (!ClickPlay(launcher_window)) {
-    return 13;
+    return FinishAutomation(13, "play_click_failed");
   }
 
   const auto start_deadline =
@@ -315,9 +362,9 @@ int RunOfficialLauncherAutomation(
   while (std::chrono::steady_clock::now() < start_deadline) {
     ReadAppendedLog(log, &log_offset, &appended_log);
     if (appended_log.find(kStartedMarker) != std::string::npos) {
-      return 0;
+      return FinishAutomation(0, "game_start_confirmed");
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
   }
-  return 14;
+  return FinishAutomation(14, "game_start_confirmation_timeout");
 }
