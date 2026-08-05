@@ -61,7 +61,7 @@ body:
     id: diagnostics
     attributes:
       label: Diagnóstico
-      description: Use “Exportar diagnóstico” nas configurações e arraste o arquivo aqui. Revise-o antes de enviar.
+      description: Use “Gerar diagnóstico completo” nas configurações e arraste o único arquivo diagnostico.json aqui. Revise-o antes de enviar.
   - type: textarea
     id: screenshots
     attributes:

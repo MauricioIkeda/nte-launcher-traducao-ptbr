@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/launcher_log.dart';
 import 'installation_service.dart';
 
 typedef ExternalUriLauncher = Future<bool> Function(Uri uri);
@@ -19,11 +20,20 @@ class GamePlatformInfo {
     required this.platform,
     required this.label,
     required this.launchTarget,
+    this.evidence = const {},
   });
 
   final GamePlatform platform;
   final String label;
   final String launchTarget;
+  final Map<String, Object?> evidence;
+
+  Map<String, Object?> toDiagnosticJson() => {
+    'id': platform.name,
+    'label': label,
+    'launchTarget': LauncherLog.redactSensitiveValues(launchTarget),
+    'evidence': evidence,
+  };
 }
 
 class GamePlatformService {
@@ -66,6 +76,15 @@ class GamePlatformService {
       launchTarget:
           launcher?.path ??
           p.join(gameDirectory, InstallationService.gameExecutable),
+      evidence: {
+        'method': 'official_launcher_fallback',
+        'launcherFound': launcher != null,
+        'launcherPath': launcher?.path,
+        'epicManifestDirectory': _epicManifestDirectory.path,
+        'steamRootsOverride': _steamRootsOverride
+            ?.map((directory) => directory.path)
+            .toList(growable: false),
+      },
     );
   }
 
@@ -143,6 +162,14 @@ class GamePlatformService {
           launchTarget:
               'com.epicgames.launcher://apps/$product'
               '?action=launch&silent=true',
+          evidence: {
+            'method': 'epic_item_manifest',
+            'manifestPath': entity.path,
+            'installLocation': installLocation,
+            'catalogNamespace': namespace,
+            'catalogItemId': catalogItemId,
+            'appName': appName,
+          },
         );
       } on GamePlatformException {
         rethrow;
@@ -183,6 +210,14 @@ class GamePlatformService {
               platform: GamePlatform.steam,
               label: 'STEAM',
               launchTarget: 'steam://run/$appId',
+              evidence: {
+                'method': 'steam_appmanifest',
+                'manifestPath': entity.path,
+                'steamRoot': root.path,
+                'appId': appId,
+                'installDir': installDir,
+                'installLocation': installLocation,
+              },
             );
           }
         } on FileSystemException {
@@ -349,7 +384,7 @@ class GamePlatformService {
     );
     if (result.exitCode != 0) {
       throw const GamePlatformException(
-        'A permissÃ£o para abrir o launcher oficial foi cancelada ou recusada.',
+        'A permissão para abrir o launcher oficial foi cancelada ou recusada.',
       );
     }
   }

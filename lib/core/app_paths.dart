@@ -4,13 +4,15 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class AppPaths {
-  AppPaths._(this.root);
+  AppPaths._(this.root, {this.testing = false});
 
   static const _legacyStorageName = 'NTE Translation Launcher';
 
   final Directory root;
+  final bool testing;
 
-  factory AppPaths.forTesting(Directory root) => AppPaths._(root);
+  factory AppPaths.forTesting(Directory root) =>
+      AppPaths._(root, testing: true);
 
   static Future<AppPaths> create() async {
     final support = await getApplicationSupportDirectory();
@@ -34,4 +36,15 @@ class AppPaths {
   File get installReceipt => File(p.join(root.path, 'install_receipt.json'));
   File get logFile => File(p.join(root.path, 'launcher.log'));
   File get diagnosticFile => File(p.join(diagnostics.path, 'diagnostico.json'));
+  File get diagnosticEventsFile =>
+      File(p.join(diagnostics.path, 'operation-history.jsonl'));
+  File get officialLaunchResultFile => File(
+    testing
+        ? p.join(diagnostics.path, 'official-launch-result.json')
+        : p.join(
+            Directory.systemTemp.path,
+            'NTE-Translation-Launcher',
+            'official-launch-result.json',
+          ),
+  );
 }

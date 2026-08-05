@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +12,7 @@ import 'models/translation_installation.dart';
 import 'models/translation_manifest.dart';
 import 'services/app_update_service.dart';
 import 'services/download_service.dart';
+import 'services/diagnostic_service.dart';
 import 'services/elevation_service.dart';
 import 'services/game_platform_service.dart';
 import 'services/installation_service.dart';
@@ -51,10 +51,14 @@ class LauncherController extends ChangeNotifier {
     required this.verifier,
     required this.migration,
     PreInstallationService? preInstallation,
+    DiagnosticService? diagnostics,
     this.autoInstall = false,
   }) : preInstallation =
            preInstallation ??
-           PreInstallationService(installer: installer, elevation: elevation);
+           PreInstallationService(installer: installer, elevation: elevation),
+       diagnostics =
+           diagnostics ??
+           DiagnosticService(paths: paths, log: log, installer: installer);
 
   final AppPaths paths;
   final LauncherLog log;
@@ -68,6 +72,7 @@ class LauncherController extends ChangeNotifier {
   final TranslationVerificationService verifier;
   final LegacyMigrationService migration;
   final PreInstallationService preInstallation;
+  final DiagnosticService diagnostics;
   final bool autoInstall;
 
   LauncherStatus status = LauncherStatus.starting;
@@ -155,6 +160,10 @@ class LauncherController extends ChangeNotifier {
       !isBusy && gameDirectory != null && verification.receiptVersion != null;
 
   Future<void> initialize() async {
+    await diagnostics.record(
+      'launcher_initialize_started',
+      details: {'autoInstall': autoInstall},
+    );
     final operation = ++_operationGeneration;
     status = LauncherStatus.starting;
     verification = const TranslationVerificationResult.checking();
@@ -240,6 +249,15 @@ class LauncherController extends ChangeNotifier {
         'Launcher inicializado; estado da tradução: '
         '${verification.status.name}.',
       );
+      await diagnostics.record(
+        'launcher_initialize_completed',
+        details: {
+          'verification': verification.status.name,
+          'gameDirectory': gameDirectory,
+          'platform': gamePlatform?.toDiagnosticJson(),
+          'manifestSource': manifestSource?.name,
+        },
+      );
       _notify();
 
       if (autoInstall && gameDirectory != null && _requiresWriteOperation) {
@@ -290,6 +308,10 @@ class LauncherController extends ChangeNotifier {
     }
 
     final candidate = selected.trim();
+    await diagnostics.record(
+      'game_directory_selection_started',
+      details: {'selected': candidate},
+    );
     final operation = ++_operationGeneration;
     validatingGameDirectory = true;
     rejectedGameDirectory = candidate;
@@ -322,6 +344,10 @@ class LauncherController extends ChangeNotifier {
       gameDirectorySelectionError =
           'Não foi possível localizar uma instalação completa do NTE. '
           'Selecione a pasta principal do jogo ou a pasta NTEGlobal.';
+      await diagnostics.record(
+        'game_directory_selection_rejected',
+        details: {'selected': candidate, 'reason': gameDirectorySelectionError},
+      );
       _notify();
       return;
     }
@@ -349,6 +375,15 @@ class LauncherController extends ChangeNotifier {
     }
     if (_isCurrent(operation)) {
       status = LauncherStatus.ready;
+      await diagnostics.record(
+        'game_directory_selection_completed',
+        details: {
+          'selected': candidate,
+          'normalized': gameDirectory,
+          'wasAdjusted': resolution.wasAdjusted,
+          'platform': gamePlatform?.toDiagnosticJson(),
+        },
+      );
       _notify();
     }
   }
@@ -449,6 +484,20 @@ class LauncherController extends ChangeNotifier {
     }
 
     final operation = ++_operationGeneration;
+    final operationName = repair
+        ? 'repair'
+        : translationUpdateAvailable
+        ? 'update'
+        : 'install';
+    await diagnostics.record(
+      'translation_operation_started',
+      details: {
+        'operation': operationName,
+        'gameDirectory': selectedGameDirectory,
+        'targetVersion': selectedManifest.translationVersion,
+        'verificationBefore': verification.status.name,
+      },
+    );
     _cancelRequested = false;
     errorMessage = null;
     currentFile = '';
@@ -531,6 +580,14 @@ class LauncherController extends ChangeNotifier {
         'Operação concluída e verificada para '
         '${selectedManifest.translationVersion}.',
       );
+      await diagnostics.record(
+        'translation_operation_completed',
+        details: {
+          'operation': operationName,
+          'version': selectedManifest.translationVersion,
+          'verificationAfter': verification.status.name,
+        },
+      );
     } on DownloadCancelledException {
       if (_isCurrent(operation)) {
         status = LauncherStatus.ready;
@@ -567,6 +624,13 @@ class LauncherController extends ChangeNotifier {
       return;
     }
     final operation = ++_operationGeneration;
+    await diagnostics.record(
+      'translation_removal_started',
+      details: {
+        'gameDirectory': directory,
+        'installedVersion': installedVersion,
+      },
+    );
     status = LauncherStatus.removing;
     errorMessage = null;
     _notify();
@@ -583,6 +647,13 @@ class LauncherController extends ChangeNotifier {
       persistedInstalledVersion = null;
       await _verifyCurrent(operation);
       status = LauncherStatus.ready;
+      await diagnostics.record(
+        'translation_removal_completed',
+        details: {
+          'gameDirectory': directory,
+          'verificationAfter': verification.status.name,
+        },
+      );
     } catch (error, stackTrace) {
       await _verifyCurrent(operation);
       await _setError(
@@ -616,6 +687,16 @@ class LauncherController extends ChangeNotifier {
     try {
       final platform = gamePlatform ?? await gamePlatforms.detect(directory);
       gamePlatform = platform;
+      await diagnostics.record(
+        'game_launch_started',
+        details: {
+          'gameDirectory': directory,
+          'platform': platform.toDiagnosticJson(),
+          'automaticOfficialPlay': officialLaunchAutomation,
+          'allowInvalidTranslation': allowInvalidTranslation,
+          'verification': verification.status.name,
+        },
+      );
       await log.info('Abrindo o jogo pela plataforma ${platform.label}.');
       await gamePlatforms.launch(
         platform,
@@ -623,6 +704,13 @@ class LauncherController extends ChangeNotifier {
         automateOfficialPlay: officialLaunchAutomation,
       );
       await log.info('Jogo acionado com sucesso; encerrando o launcher.');
+      await diagnostics.record(
+        'game_launch_dispatched',
+        details: {
+          'platform': platform.toDiagnosticJson(),
+          'automaticOfficialPlay': officialLaunchAutomation,
+        },
+      );
       await Future<void>.delayed(const Duration(milliseconds: 350));
       exit(0);
     } catch (error, stackTrace) {
@@ -662,7 +750,7 @@ class LauncherController extends ChangeNotifier {
     officialLaunchAutomation = value;
     await settings.setOfficialLaunchAutomation(value);
     await log.info(
-      'Play automÃ¡tico do launcher oficial '
+      'Play automático do launcher oficial '
       '${value ? 'ativado' : 'desativado'}.',
     );
     _notify();
@@ -724,59 +812,72 @@ class LauncherController extends ChangeNotifier {
   }
 
   Future<File> exportDiagnostics({bool reveal = true}) async {
-    await paths.diagnostics.create(recursive: true);
-    final recentLogs = await log.diagnosticExcerpts();
-    final payload = {
-      'schemaVersion': 2,
-      'createdAt': DateTime.now().toUtc().toIso8601String(),
-      'launcherVersion': appVersion,
-      'status': status.name,
-      'gameDirectory': gameDirectory,
-      'platform': gamePlatform?.label,
-      'manifestSource': manifestSource?.name,
-      'availableTranslationVersion': manifest?.translationVersion,
-      'installedTranslationVersion': installedVersion,
-      'verificationStatus': verification.status.name,
-      'verification': {
-        'status': verification.status.name,
-        'detectedVersion': verification.detectedVersion,
-        'receiptVersion': verification.receiptVersion,
-        'validFiles': verification.validFiles,
-        'missingFiles': verification.missingFiles,
-        'modifiedFiles': verification.modifiedFiles,
-        'unverifiableFiles': verification.unverifiableFiles,
-        'managedDirectory': verification.managedDirectory,
-        'error': verification.error?.toString(),
+    final file = await diagnostics.export(
+      launcherState: {
+        'launcherVersion': appVersion,
+        'status': status.name,
+        'gameDirectory': gameDirectory,
+        'platform': gamePlatform?.toDiagnosticJson(),
+        'manifestSource': manifestSource?.name,
+        'availableTranslationVersion': manifest?.translationVersion,
+        'installedTranslationVersion': installedVersion,
+        'verificationStatus': verification.status.name,
+        'verification': {
+          'status': verification.status.name,
+          'detectedVersion': verification.detectedVersion,
+          'receiptVersion': verification.receiptVersion,
+          'validFiles': verification.validFiles,
+          'missingFiles': verification.missingFiles,
+          'modifiedFiles': verification.modifiedFiles,
+          'unverifiableFiles': verification.unverifiableFiles,
+          'managedDirectory': verification.managedDirectory,
+          'error': verification.error?.toString(),
+        },
+        'offlineMode': offlineMode,
+        'settings': {
+          'automaticLauncherUpdates': automaticLauncherUpdates,
+          'officialLaunchAutomation': officialLaunchAutomation,
+        },
+        'launcherUpdate': {
+          'checking': checkingAppUpdate,
+          'installing': updatingLauncher,
+          'availableVersion': availableAppUpdate?.version,
+          'mandatory': availableAppUpdate?.mandatory,
+          'installerSize': availableAppUpdate?.installerSize,
+          'receivedBytes': appUpdateReceivedBytes,
+          'totalBytes': appUpdateTotalBytes,
+        },
+        'operation': {
+          'currentFile': currentFile,
+          'receivedBytes': receivedBytes,
+          'totalBytes': totalBytes,
+          'verifiedFiles': verifiedFiles,
+          'verificationTotalFiles': verificationTotalFiles,
+          'cancelRequested': _cancelRequested,
+        },
+        'directorySelection': {
+          'validating': validatingGameDirectory,
+          'rejectedDirectory': rejectedGameDirectory,
+          'error': gameDirectorySelectionError,
+        },
+        'preInstallationChecks': [
+          for (final check in preInstallationReport?.checks ?? const [])
+            {
+              'id': check.id,
+              'status': check.status.name,
+              'detail': check.detail,
+            },
+        ],
+        'lastError': errorMessage,
       },
-      'offlineMode': offlineMode,
-      'preInstallationChecks': [
-        for (final check in preInstallationReport?.checks ?? const [])
-          {'id': check.id, 'status': check.status.name, 'detail': check.detail},
-      ],
-      'lastError': errorMessage,
-      'logFiles': [
-        paths.logFile.path,
-        for (var index = 1; index <= 5; index++) '${paths.logFile.path}.$index',
-      ],
-      'recentLogs': recentLogs,
-    };
-    final temporary = File('${paths.diagnosticFile.path}.tmp');
-    await temporary.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(payload),
-      flush: true,
+      gameDirectory: gameDirectory,
+      gamePlatform: gamePlatform,
+      manifest: manifest,
     );
-    if (await paths.diagnosticFile.exists()) {
-      await paths.diagnosticFile.delete();
-    }
-    await temporary.rename(paths.diagnosticFile.path);
-    await log.info('Diagnóstico exportado para ${paths.diagnosticFile.path}.');
     if (reveal && Platform.isWindows) {
-      await Process.start('explorer.exe', [
-        '/select,',
-        paths.diagnosticFile.path,
-      ]);
+      await Process.start('explorer.exe', ['/select,', file.path]);
     }
-    return paths.diagnosticFile;
+    return file;
   }
 
   Future<void> _setError(
@@ -787,6 +888,17 @@ class LauncherController extends ChangeNotifier {
     errorMessage = '$context\n${_friendlyError(error)}';
     status = LauncherStatus.error;
     await log.error(context, error: error, stackTrace: stackTrace);
+    await diagnostics.record(
+      'launcher_error',
+      details: {
+        'context': context,
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+        'status': status.name,
+        'gameDirectory': gameDirectory,
+        'platform': gamePlatform?.toDiagnosticJson(),
+      },
+    );
   }
 
   String _friendlyError(Object error) {

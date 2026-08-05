@@ -143,22 +143,49 @@ void main() {
       settings: _FakeSettings(game.path),
     );
     await controller.initialize();
+    await log.info('api_key=super-secret-diagnostic-value');
+    final officialLog = File(
+      p.join(game.path, 'NTEGlobal', 'UserData', 'Log', 'NTEGlobalGame.log'),
+    );
+    await officialLog.parent.create(recursive: true);
+    await officialLog.writeAsString(
+      'all ready, wait for start game access_token=hidden-game-token',
+    );
+    await paths.officialLaunchResultFile.parent.create(recursive: true);
+    await paths.officialLaunchResultFile.writeAsString(
+      jsonEncode({
+        'schemaVersion': 1,
+        'exitCode': 12,
+        'stage': 'ready_marker_or_window_timeout',
+      }),
+    );
 
     final file = await controller.exportDiagnostics(reveal: false);
     final diagnostics = await file.readAsString();
     final decoded = jsonDecode(diagnostics) as Map<String, dynamic>;
 
-    expect(decoded['schemaVersion'], 2);
+    expect(decoded['schemaVersion'], 3);
     expect(diagnostics, contains('verificationStatus'));
-    expect(decoded['gameDirectory'], game.path);
-    expect(decoded['verification'], isA<Map<String, dynamic>>());
-    expect(decoded['recentLogs'], isA<List<dynamic>>());
+    expect(decoded['privacy']['singleFile'], isTrue);
+    expect(decoded['launcher']['gameDirectory'], game.path);
+    expect(decoded['game']['normalizedDirectory'], game.path);
+    expect(decoded['launcher']['verification'], isA<Map<String, dynamic>>());
+    expect(decoded['runtime'], isA<Map<String, dynamic>>());
+    expect(decoded['operationHistory'], isA<List<dynamic>>());
+    expect(decoded['embeddedLogs']['launcher'], isA<List<dynamic>>());
+    expect(decoded['embeddedLogs']['game'], isNotEmpty);
     expect(
-      (decoded['recentLogs'] as List<dynamic>).join('\n'),
+      decoded['lastOfficialLaunchAutomation']['stage'],
+      'ready_marker_or_window_timeout',
+    );
+    expect(
+      (decoded['embeddedLogs']['launcher'] as List<dynamic>).join('\n'),
       contains('Verifica'),
     );
-    expect(diagnostics, isNot(contains('token')));
-    expect(diagnostics, isNot(contains('api_key')));
+    expect(diagnostics, isNot(contains('super-secret-diagnostic-value')));
+    expect(diagnostics, isNot(contains('hidden-game-token')));
+    expect(diagnostics, contains('[REDACTED]'));
+    expect(decoded, isNot(containsPair('logFiles', anything)));
   });
 
   test(

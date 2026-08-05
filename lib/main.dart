@@ -1191,12 +1191,12 @@ class _SettingsDialog extends StatelessWidget {
                       );
                     },
                     icon: const Icon(Icons.support_agent_rounded, size: 17),
-                    label: const Text('EXPORTAR DIAGNÓSTICO'),
+                    label: const Text('GERAR DIAGNÓSTICO COMPLETO'),
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Para agilizar o suporte, exporte o diagnóstico e anexe-o '
-                    'ao relato no GitHub.',
+                    'Um único arquivo reúne ambiente, plataforma, instalação, '
+                    'histórico e logs. Gere-o e anexe ao relato no GitHub.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: _muted, fontSize: 9),
                   ),

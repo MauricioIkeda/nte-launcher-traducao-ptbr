@@ -30,6 +30,11 @@ void main() {
 
     await log.info('tentativa anterior');
     await log.error('api_key=segredo-que-nao-pode-sair');
+    await log.error(
+      '{"access_token":"token-json", '
+      '"refresh-token":"refresh-json", '
+      '"Authorization":"Bearer token-http"}',
+    );
 
     final excerpts = await log.diagnosticExcerpts(maxTotalBytes: 4096);
 
@@ -41,5 +46,8 @@ void main() {
       excerpts.single['content'],
       isNot(contains('segredo-que-nao-pode-sair')),
     );
+    expect(excerpts.single['content'], isNot(contains('token-json')));
+    expect(excerpts.single['content'], isNot(contains('refresh-json')));
+    expect(excerpts.single['content'], isNot(contains('token-http')));
   });
 }
