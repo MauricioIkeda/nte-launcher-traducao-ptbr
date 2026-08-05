@@ -143,18 +143,46 @@ void main() {
     expect(receivedUri, Uri.parse(info.launchTarget));
   });
 
-  test('ignores autoplay and opens the official launcher normally', () async {
+  test('opens the official launcher manually by default', () async {
     final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
     await launcher.create();
     String? receivedExecutable;
-    List<String>? receivedArguments;
+    String? receivedWorkingDirectory;
+    var automationCalls = 0;
+    final service = GamePlatformService(
+      epicManifestDirectory: Directory(p.join(sandbox.path, 'epic-manifests')),
+      steamRoots: const [],
+      officialLauncherOpener: (executable, workingDirectory) async {
+        receivedExecutable = executable;
+        receivedWorkingDirectory = workingDirectory;
+      },
+      officialLauncherAutomation: (executable, workingDirectory) async {
+        automationCalls++;
+      },
+    );
+    final info = GamePlatformInfo(
+      platform: GamePlatform.official,
+      label: 'LAUNCHER OFICIAL',
+      launchTarget: launcher.path,
+    );
+
+    await service.launch(info, gameDirectory.path);
+
+    expect(receivedExecutable, launcher.path);
+    expect(receivedWorkingDirectory, gameDirectory.path);
+    expect(automationCalls, 0);
+  });
+
+  test('uses ready-state automation only when explicitly enabled', () async {
+    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
+    await launcher.create();
+    String? receivedExecutable;
     String? receivedWorkingDirectory;
     final service = GamePlatformService(
       epicManifestDirectory: Directory(p.join(sandbox.path, 'epic-manifests')),
       steamRoots: const [],
-      gameExecutableLauncher: (executable, arguments, workingDirectory) async {
+      officialLauncherAutomation: (executable, workingDirectory) async {
         receivedExecutable = executable;
-        receivedArguments = arguments;
         receivedWorkingDirectory = workingDirectory;
       },
     );
@@ -164,32 +192,9 @@ void main() {
       launchTarget: launcher.path,
     );
 
-    await service.launch(info, gameDirectory.path, officialAutoplay: true);
+    await service.launch(info, gameDirectory.path, automateOfficialPlay: true);
 
     expect(receivedExecutable, launcher.path);
-    expect(receivedArguments, isEmpty);
     expect(receivedWorkingDirectory, gameDirectory.path);
-  });
-
-  test('opens the official launcher without autoplay when disabled', () async {
-    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
-    await launcher.create();
-    List<String>? receivedArguments;
-    final service = GamePlatformService(
-      epicManifestDirectory: Directory(p.join(sandbox.path, 'epic-manifests')),
-      steamRoots: const [],
-      gameExecutableLauncher: (executable, arguments, workingDirectory) async {
-        receivedArguments = arguments;
-      },
-    );
-    final info = GamePlatformInfo(
-      platform: GamePlatform.official,
-      label: 'LAUNCHER OFICIAL',
-      launchTarget: launcher.path,
-    );
-
-    await service.launch(info, gameDirectory.path, officialAutoplay: false);
-
-    expect(receivedArguments, isEmpty);
   });
 }

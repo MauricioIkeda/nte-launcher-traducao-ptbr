@@ -82,7 +82,7 @@ class LauncherController extends ChangeNotifier {
   bool checkingAppUpdate = false;
   bool updatingLauncher = false;
   bool automaticLauncherUpdates = false;
-  bool officialAutoplay = false;
+  bool officialLaunchAutomation = false;
   int appUpdateReceivedBytes = 0;
   int appUpdateTotalBytes = 0;
   String? errorMessage;
@@ -163,9 +163,9 @@ class LauncherController extends ChangeNotifier {
       final savedGameDirectory = await settings.getGameDirectory();
       persistedInstalledVersion = await settings.getInstalledVersion();
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
+      officialLaunchAutomation = await settings.getOfficialLaunchAutomation();
       // Force every existing installation away from the unsafe cold
       // /autoplay path, including users who previously enabled the option.
-      officialAutoplay = false;
       await settings.setOfficialAutoplay(false);
       final savedResolution = savedGameDirectory == null
           ? null
@@ -617,7 +617,11 @@ class LauncherController extends ChangeNotifier {
       final platform = gamePlatform ?? await gamePlatforms.detect(directory);
       gamePlatform = platform;
       await log.info('Abrindo o jogo pela plataforma ${platform.label}.');
-      await gamePlatforms.launch(platform, directory, officialAutoplay: false);
+      await gamePlatforms.launch(
+        platform,
+        directory,
+        automateOfficialPlay: officialLaunchAutomation,
+      );
       await log.info('Jogo acionado com sucesso; encerrando o launcher.');
       await Future<void>.delayed(const Duration(milliseconds: 350));
       exit(0);
@@ -654,9 +658,13 @@ class LauncherController extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> setOfficialAutoplay(bool value) async {
-    officialAutoplay = false;
-    await settings.setOfficialAutoplay(false);
+  Future<void> setOfficialLaunchAutomation(bool value) async {
+    officialLaunchAutomation = value;
+    await settings.setOfficialLaunchAutomation(value);
+    await log.info(
+      'Play automÃ¡tico do launcher oficial '
+      '${value ? 'ativado' : 'desativado'}.',
+    );
     _notify();
   }
 

@@ -594,13 +594,6 @@ class _UpdatePanel extends StatelessWidget {
             const SizedBox(height: 10),
             _GameDirectorySelectionNotice(controller: controller),
           ],
-          // AutoPlay is intentionally hidden for the official client.
-          // Its cold /autoplay path can start the game before local resources
-          // are ready, causing character voices to disappear.
-          // if (controller.gamePlatform?.platform == GamePlatform.official) ...[
-          //   const SizedBox(height: 10),
-          //   _OfficialAutoplayToggle(controller: controller),
-          // ],
           const SizedBox(height: 12),
           _ProgressArea(controller: controller),
           if (controller.errorMessage != null) ...[
@@ -613,6 +606,11 @@ class _UpdatePanel extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           const _RiskNotice(),
+          if (translationIsCurrent &&
+              controller.gamePlatform?.platform == GamePlatform.official) ...[
+            const SizedBox(height: 12),
+            _OfficialLaunchAutomationOption(controller: controller),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -673,6 +671,68 @@ class _UpdatePanel extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfficialLaunchAutomationOption extends StatelessWidget {
+  const _OfficialLaunchAutomationOption({required this.controller});
+
+  final LauncherController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: const Color(0x66101A28),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(
+          color: controller.officialLaunchAutomation
+              ? _cyan.withValues(alpha: .52)
+              : const Color(0x554B657D),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            controller.officialLaunchAutomation
+                ? Icons.smart_display_rounded
+                : Icons.touch_app_outlined,
+            color: controller.officialLaunchAutomation ? _cyan : _muted,
+            size: 20,
+          ),
+          const SizedBox(width: 11),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'PLAY AUTOMÁTICO NO LAUNCHER OFICIAL',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .65,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Desativado por padrão. Quando ligado, espera o NTE ficar '
+                  'pronto e aciona Play; desligado, você clica manualmente.',
+                  style: TextStyle(color: _muted, fontSize: 8, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: controller.officialLaunchAutomation,
+            onChanged: controller.isBusy
+                ? null
+                : controller.setOfficialLaunchAutomation,
           ),
         ],
       ),
@@ -1342,70 +1402,6 @@ class _GameDirectorySelectionNotice extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-// ignore: unused_element
-class _OfficialAutoplayToggle extends StatelessWidget {
-  const _OfficialAutoplayToggle({required this.controller});
-
-  final LauncherController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: controller.isBusy
-            ? null
-            : () =>
-                  controller.setOfficialAutoplay(!controller.officialAutoplay),
-        borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          padding: const EdgeInsets.fromLTRB(11, 8, 8, 8),
-          decoration: BoxDecoration(
-            color: const Color(0x66101A28),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0x554B657D)),
-          ),
-          child: Row(
-            children: [
-              Checkbox(
-                value: controller.officialAutoplay,
-                onChanged: controller.isBusy
-                    ? null
-                    : (value) => controller.setOfficialAutoplay(value ?? true),
-                activeColor: _cyan,
-                checkColor: const Color(0xFF07141D),
-                visualDensity: VisualDensity.compact,
-              ),
-              const SizedBox(width: 5),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'INICIAR O JOGO AUTOMATICAMENTE',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: .7,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Pula o segundo clique no launcher oficial do NTE.',
-                      style: TextStyle(color: _muted, fontSize: 8),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.fast_forward_rounded, color: _cyan, size: 18),
-            ],
-          ),
-        ),
       ),
     );
   }

@@ -84,6 +84,39 @@ void main() {
     expect(statuses.last, LauncherStatus.ready);
   });
 
+  test('official Play automation is opt-in and persisted separately', () async {
+    final settings = _FakeSettings(game.path);
+    final controller = harness.controller(
+      manifest: testManifest(contents: contents),
+      contents: contents,
+      settings: settings,
+    );
+
+    await controller.initialize();
+
+    expect(controller.officialLaunchAutomation, isFalse);
+    await controller.setOfficialLaunchAutomation(true);
+    expect(controller.officialLaunchAutomation, isTrue);
+    expect(settings.officialLaunchAutomation, isTrue);
+  });
+
+  test(
+    'new automation preference can be restored without old autoplay',
+    () async {
+      final settings = _FakeSettings(game.path)
+        ..officialLaunchAutomation = true;
+      final controller = harness.controller(
+        manifest: testManifest(contents: contents),
+        contents: contents,
+        settings: settings,
+      );
+
+      await controller.initialize();
+
+      expect(controller.officialLaunchAutomation, isTrue);
+    },
+  );
+
   test('normalizes a previously saved nested launcher directory', () async {
     final nested = Directory(p.join(game.path, 'NTEGlobal'));
     await nested.create();
@@ -475,6 +508,7 @@ class _FakeSettings implements LauncherSettings {
 
   String? gameDirectory;
   String? installedVersion;
+  bool officialLaunchAutomation = false;
 
   @override
   Future<String?> getGameDirectory() async => gameDirectory;
@@ -495,6 +529,11 @@ class _FakeSettings implements LauncherSettings {
   Future<bool> getOfficialAutoplay() async => true;
   @override
   Future<void> setOfficialAutoplay(bool value) async {}
+  @override
+  Future<bool> getOfficialLaunchAutomation() async => officialLaunchAutomation;
+  @override
+  Future<void> setOfficialLaunchAutomation(bool value) async =>
+      officialLaunchAutomation = value;
 }
 
 class _FakeManifestRepository extends ManifestRepository {
@@ -567,6 +606,7 @@ class _FakeElevationService extends ElevationService {
 
 class _FakeGamePlatformService extends GamePlatformService {
   int launchCount = 0;
+  bool? automateOfficialPlay;
   @override
   Future<GamePlatformInfo> detect(String gameDirectory) async =>
       GamePlatformInfo(
@@ -578,9 +618,10 @@ class _FakeGamePlatformService extends GamePlatformService {
   Future<void> launch(
     GamePlatformInfo info,
     String gameDirectory, {
-    bool officialAutoplay = true,
+    bool automateOfficialPlay = false,
   }) async {
     launchCount++;
+    this.automateOfficialPlay = automateOfficialPlay;
   }
 }
 
