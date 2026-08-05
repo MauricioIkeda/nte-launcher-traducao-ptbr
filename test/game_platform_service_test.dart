@@ -197,4 +197,183 @@ void main() {
     expect(receivedExecutable, launcher.path);
     expect(receivedWorkingDirectory, gameDirectory.path);
   });
+
+  test('starts the automation helper directly under Wine', () async {
+    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
+    final internal = File(
+      p.join(gameDirectory.path, 'NTEGlobal', 'NTEGlobalGame.exe'),
+    );
+    await launcher.create();
+    await internal.parent.create(recursive: true);
+    await internal.create();
+    final resultFile = File(p.join(sandbox.path, 'wine-result.json'));
+    var directCalls = 0;
+    var elevatedCalls = 0;
+    late List<String> receivedArguments;
+    final automation = OfficialLauncherAutomationService(
+      wineRuntimeDetector: () => true,
+      resultFile: resultFile,
+      helperExecutable: r'C:\launcher\NTE-Launcher.exe',
+      directHelperStarter: (executable, arguments, workingDirectory) async {
+        directCalls++;
+        receivedArguments = arguments;
+        final attemptId = arguments
+            .singleWhere((argument) => argument.startsWith('--automation-id='))
+            .substring('--automation-id='.length);
+        await resultFile.writeAsString(
+          jsonEncode({
+            'attemptId': attemptId,
+            'exitCode': -1,
+            'stage': 'started',
+          }),
+        );
+      },
+      elevatedHelperStarter: (environment) async {
+        elevatedCalls++;
+        return 0;
+      },
+    );
+
+    await automation.launch(launcher.path, gameDirectory.path);
+
+    expect(directCalls, 1);
+    expect(elevatedCalls, 0);
+    expect(receivedArguments, contains('--official-ready-play'));
+    expect(
+      receivedArguments,
+      anyElement(startsWith('--official-launcher-hex=')),
+    );
+  });
+
+  test('keeps elevation on native Windows and confirms the helper', () async {
+    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
+    final internal = File(
+      p.join(gameDirectory.path, 'NTEGlobal', 'NTEGlobalGame.exe'),
+    );
+    await launcher.create();
+    await internal.parent.create(recursive: true);
+    await internal.create();
+    final resultFile = File(p.join(sandbox.path, 'windows-result.json'));
+    var directCalls = 0;
+    var elevatedCalls = 0;
+    final automation = OfficialLauncherAutomationService(
+      wineRuntimeDetector: () => false,
+      resultFile: resultFile,
+      directHelperStarter: (executable, arguments, workingDirectory) async {
+        directCalls++;
+      },
+      elevatedHelperStarter: (environment) async {
+        elevatedCalls++;
+        expect(environment['NTE_TRANSLATION_LAUNCHER'], isNotEmpty);
+        await resultFile.writeAsString(
+          jsonEncode({
+            'attemptId': environment['NTE_AUTOMATION_ID'],
+            'exitCode': -1,
+            'stage': 'paths_validated',
+          }),
+        );
+        return 0;
+      },
+    );
+
+    await automation.launch(launcher.path, gameDirectory.path);
+
+    expect(directCalls, 0);
+    expect(elevatedCalls, 1);
+  });
+
+  test('does not report success when the helper never starts', () async {
+    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
+    final internal = File(
+      p.join(gameDirectory.path, 'NTEGlobal', 'NTEGlobalGame.exe'),
+    );
+    await launcher.create();
+    await internal.parent.create(recursive: true);
+    await internal.create();
+    final automation = OfficialLauncherAutomationService(
+      wineRuntimeDetector: () => true,
+      resultFile: File(p.join(sandbox.path, 'missing-result.json')),
+      directHelperStarter: (executable, arguments, workingDirectory) async {},
+      confirmationTimeout: const Duration(milliseconds: 20),
+    );
+
+    await expectLater(
+      automation.launch(launcher.path, gameDirectory.path),
+      throwsA(
+        isA<GamePlatformException>().having(
+          (error) => error.message,
+          'message',
+          contains('não confirmou'),
+        ),
+      ),
+    );
+  });
+
+  test('does not accept a result left by another automation attempt', () async {
+    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
+    final internal = File(
+      p.join(gameDirectory.path, 'NTEGlobal', 'NTEGlobalGame.exe'),
+    );
+    await launcher.create();
+    await internal.parent.create(recursive: true);
+    await internal.create();
+    final resultFile = File(p.join(sandbox.path, 'stale-result.json'));
+    final automation = OfficialLauncherAutomationService(
+      wineRuntimeDetector: () => true,
+      resultFile: resultFile,
+      directHelperStarter: (executable, arguments, workingDirectory) async {
+        await resultFile.writeAsString(
+          jsonEncode({
+            'attemptId': 'different-attempt',
+            'exitCode': -1,
+            'stage': 'started',
+          }),
+        );
+      },
+      confirmationTimeout: const Duration(milliseconds: 20),
+    );
+
+    await expectLater(
+      automation.launch(launcher.path, gameDirectory.path),
+      throwsA(isA<GamePlatformException>()),
+    );
+  });
+
+  test('surfaces an immediate native helper failure', () async {
+    final launcher = File(p.join(gameDirectory.path, 'NTEGlobalLauncher.exe'));
+    final internal = File(
+      p.join(gameDirectory.path, 'NTEGlobal', 'NTEGlobalGame.exe'),
+    );
+    await launcher.create();
+    await internal.parent.create(recursive: true);
+    await internal.create();
+    final resultFile = File(p.join(sandbox.path, 'failure-result.json'));
+    final automation = OfficialLauncherAutomationService(
+      wineRuntimeDetector: () => true,
+      resultFile: resultFile,
+      directHelperStarter: (executable, arguments, workingDirectory) async {
+        final attemptId = arguments
+            .singleWhere((argument) => argument.startsWith('--automation-id='))
+            .substring('--automation-id='.length);
+        await resultFile.writeAsString(
+          jsonEncode({
+            'attemptId': attemptId,
+            'exitCode': 11,
+            'stage': 'official_launcher_start_failed',
+          }),
+        );
+      },
+    );
+
+    await expectLater(
+      automation.launch(launcher.path, gameDirectory.path),
+      throwsA(
+        isA<GamePlatformException>().having(
+          (error) => error.message,
+          'message',
+          contains('launcher oficial não pôde ser iniciado'),
+        ),
+      ),
+    );
+  });
 }

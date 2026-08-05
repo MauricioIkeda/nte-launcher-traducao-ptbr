@@ -17,6 +17,8 @@ constexpr char kStartedMarker[] = "GameClientAgent::launchGame]  start game";
 constexpr char kLauncherPrefix[] = "--official-launcher-hex=";
 constexpr char kInternalPrefix[] = "--internal-launcher-hex=";
 constexpr char kLogPrefix[] = "--official-log-hex=";
+constexpr char kAttemptPrefix[] = "--automation-id=";
+std::string g_attempt_id;
 
 void WriteAutomationResult(int code, const char* stage) {
   wchar_t temporary_path[MAX_PATH + 1] = {};
@@ -34,13 +36,15 @@ void WriteAutomationResult(int code, const char* stage) {
       directory + L"\\official-launch-result.json";
   SYSTEMTIME time = {};
   ::GetSystemTime(&time);
-  char payload[512] = {};
+  char payload[640] = {};
   const int length = std::snprintf(
       payload, sizeof(payload),
-      "{\n  \"schemaVersion\": 1,\n  \"recordedAt\": "
+      "{\n  \"schemaVersion\": 1,\n  \"attemptId\": \"%s\",\n  "
+      "\"recordedAt\": "
       "\"%04u-%02u-%02uT%02u:%02u:%02u.%03uZ\",\n  \"processId\": "
       "%lu,\n  \"exitCode\": %d,\n  \"stage\": \"%s\"\n}\n",
-      time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+      g_attempt_id.c_str(), time.wYear, time.wMonth, time.wDay, time.wHour,
+      time.wMinute,
       time.wSecond, time.wMilliseconds,
       static_cast<unsigned long>(::GetCurrentProcessId()), code, stage);
   if (length <= 0 || length >= static_cast<int>(sizeof(payload))) {
@@ -75,6 +79,44 @@ int HexDigit(char value) {
   }
   return -1;
 }
+
+std::string ReadArgument(const std::vector<std::string>& arguments,
+                         const char* prefix) {
+  const std::string wanted(prefix);
+  for (const std::string& argument : arguments) {
+    if (argument.rfind(wanted, 0) == 0) {
+      return argument.substr(wanted.size());
+    }
+  }
+  return {};
+}
+
+bool IsSafeAttemptId(const std::string& value) {
+  if (value.empty() || value.size() > 64) {
+    return false;
+  }
+  return std::all_of(value.begin(), value.end(), [](char character) {
+    return (character >= '0' && character <= '9') ||
+           (character >= 'a' && character <= 'f') || character == '-';
+  });
+}
+
+class ScopedMutex {
+ public:
+  explicit ScopedMutex(HANDLE handle) : handle_(handle) {}
+  ~ScopedMutex() {
+    if (handle_ != nullptr) {
+      ::ReleaseMutex(handle_);
+      ::CloseHandle(handle_);
+    }
+  }
+
+  ScopedMutex(const ScopedMutex&) = delete;
+  ScopedMutex& operator=(const ScopedMutex&) = delete;
+
+ private:
+  HANDLE handle_;
+};
 
 std::wstring DecodeHexUtf8(const std::string& value) {
   if (value.empty() || value.size() % 2 != 0 || value.size() > 65534) {
@@ -316,6 +358,25 @@ bool LaunchOfficialLauncher(const std::wstring& launcher) {
 
 int RunOfficialLauncherAutomation(
     const std::vector<std::string>& command_line_arguments) {
+  const std::string attempt_id =
+      ReadArgument(command_line_arguments, kAttemptPrefix);
+  if (!IsSafeAttemptId(attempt_id)) {
+    g_attempt_id = "invalid";
+    return FinishAutomation(10, "invalid_attempt_id");
+  }
+  g_attempt_id = attempt_id;
+
+  HANDLE mutex = ::CreateMutexW(
+      nullptr, TRUE, L"Local\\NTETranslationLauncherOfficialAutomation");
+  if (mutex == nullptr) {
+    return FinishAutomation(16, "automation_mutex_failed");
+  }
+  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+    ::CloseHandle(mutex);
+    return FinishAutomation(15, "automation_already_running");
+  }
+  ScopedMutex automation_mutex(mutex);
+
   WriteAutomationResult(-1, "started");
   const std::wstring launcher =
       FullPath(ReadEncodedPath(command_line_arguments, kLauncherPrefix));
@@ -327,11 +388,13 @@ int RunOfficialLauncherAutomation(
       !HasExpectedPaths(launcher, internal, log)) {
     return FinishAutomation(10, "invalid_paths_or_arguments");
   }
+  WriteAutomationResult(-1, "paths_validated");
 
   uint64_t log_offset = FileSizeOrZero(log);
   if (!LaunchOfficialLauncher(launcher)) {
     return FinishAutomation(11, "official_launcher_start_failed");
   }
+  WriteAutomationResult(-1, "waiting_for_launcher_ready");
 
   std::string appended_log;
   HWND launcher_window = nullptr;
@@ -353,12 +416,15 @@ int RunOfficialLauncherAutomation(
       appended_log.find(kReadyMarker) == std::string::npos) {
     return FinishAutomation(12, "ready_marker_or_window_timeout");
   }
+  WriteAutomationResult(-1, "launcher_ready");
   if (!ClickPlay(launcher_window)) {
     return FinishAutomation(13, "play_click_failed");
   }
+  WriteAutomationResult(-1, "play_click_sent");
 
   const auto start_deadline =
       std::chrono::steady_clock::now() + std::chrono::seconds(30);
+  WriteAutomationResult(-1, "waiting_for_game_start");
   while (std::chrono::steady_clock::now() < start_deadline) {
     ReadAppendedLog(log, &log_offset, &appended_log);
     if (appended_log.find(kStartedMarker) != std::string::npos) {

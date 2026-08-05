@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/launcher_log.dart';
+import '../core/runtime_environment.dart';
 import 'installation_service.dart';
 
 typedef ExternalUriLauncher = Future<bool> Function(Uri uri);
@@ -12,6 +13,15 @@ typedef OfficialLauncherAutomation =
     Future<void> Function(String executable, String gameDirectory);
 typedef OfficialLauncherOpener =
     Future<void> Function(String executable, String gameDirectory);
+typedef WineRuntimeDetector = bool Function();
+typedef DirectHelperStarter =
+    Future<void> Function(
+      String executable,
+      List<String> arguments,
+      String workingDirectory,
+    );
+typedef ElevatedHelperStarter =
+    Future<int> Function(Map<String, String> environment);
 
 enum GamePlatform { epicGames, steam, official }
 
@@ -48,7 +58,8 @@ class GamePlatformService {
        _steamRootsOverride = steamRoots,
        _externalUriLauncher = externalUriLauncher ?? _launchExternalUri,
        _officialLauncherAutomation =
-           officialLauncherAutomation ?? _launchOfficialWhenReady,
+           officialLauncherAutomation ??
+           OfficialLauncherAutomationService().launch,
        _officialLauncherOpener =
            officialLauncherOpener ?? _openOfficialLauncher;
 
@@ -113,9 +124,10 @@ class GamePlatformService {
         }
         // Never use /autoplay: it can start HTGame before local resources are
         // ready and remove character voices. Manual Play is the conservative
-        // default. When explicitly enabled, the elevated helper opens the
+        // default. When explicitly enabled, a runtime-aware helper opens the
         // official launcher normally, waits for its ready marker and presses
-        // Play only after the launcher has completed preparation.
+        // Play only after preparation. Native Windows uses UAC; Wine/Proton
+        // starts the helper directly inside the same prefix.
         if (automateOfficialPlay) {
           await _officialLauncherAutomation(executable.path, gameDirectory);
         } else {
@@ -339,67 +351,12 @@ class GamePlatformService {
     );
   }
 
-  static Future<void> _launchOfficialWhenReady(
-    String executable,
-    String gameDirectory,
-  ) async {
-    if (!Platform.isWindows) {
-      await _launchGameExecutable(executable, const [], gameDirectory);
-      return;
-    }
-
-    final internalLauncher = await _findInternalOfficialLauncher(
-      executable,
-      gameDirectory,
-    );
-    if (internalLauncher == null) {
-      await _launchGameExecutable(executable, const [], gameDirectory);
-      return;
-    }
-    final logFile = File(
-      p.join(
-        internalLauncher.parent.path,
-        'UserData',
-        'Log',
-        'NTEGlobalGame.log',
-      ),
-    );
-
-    final result = await Process.run(
-      'powershell.exe',
-      const [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        r"$ErrorActionPreference='Stop'; $helperArgs='--official-ready-play --official-launcher-hex=' + $env:NTE_OFFICIAL_LAUNCHER_HEX + ' --internal-launcher-hex=' + $env:NTE_INTERNAL_LAUNCHER_HEX + ' --official-log-hex=' + $env:NTE_OFFICIAL_LOG_HEX; Start-Process -FilePath $env:NTE_TRANSLATION_LAUNCHER -ArgumentList $helperArgs -Verb RunAs -WindowStyle Hidden",
-      ],
-      environment: {
-        ...Platform.environment,
-        'NTE_TRANSLATION_LAUNCHER': Platform.resolvedExecutable,
-        'NTE_OFFICIAL_LAUNCHER_HEX': _hexUtf8(executable),
-        'NTE_INTERNAL_LAUNCHER_HEX': _hexUtf8(internalLauncher.path),
-        'NTE_OFFICIAL_LOG_HEX': _hexUtf8(logFile.path),
-      },
-      runInShell: false,
-    );
-    if (result.exitCode != 0) {
-      throw const GamePlatformException(
-        'A permissão para abrir o launcher oficial foi cancelada ou recusada.',
-      );
-    }
-  }
-
   static Future<void> _openOfficialLauncher(
     String executable,
     String gameDirectory,
   ) => _launchGameExecutable(executable, const [], gameDirectory);
 
-  static String _hexUtf8(String value) => utf8
-      .encode(value)
-      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-      .join();
-
-  static Future<File?> _findInternalOfficialLauncher(
+  static Future<File?> findInternalOfficialLauncher(
     String selectedLauncher,
     String gameDirectory,
   ) async {
@@ -415,6 +372,189 @@ class GamePlatformService {
     }
     return null;
   }
+}
+
+class OfficialLauncherAutomationService {
+  OfficialLauncherAutomationService({
+    WineRuntimeDetector? wineRuntimeDetector,
+    DirectHelperStarter? directHelperStarter,
+    ElevatedHelperStarter? elevatedHelperStarter,
+    File? resultFile,
+    String? helperExecutable,
+    this.confirmationTimeout = const Duration(seconds: 5),
+  }) : _wineRuntimeDetector =
+           wineRuntimeDetector ?? (() => RuntimeEnvironment.isWine),
+       _directHelperStarter = directHelperStarter ?? _startDirectHelper,
+       _elevatedHelperStarter = elevatedHelperStarter ?? _startElevatedHelper,
+       _resultFile = resultFile ?? _defaultResultFile(),
+       _helperExecutable = helperExecutable ?? Platform.resolvedExecutable;
+
+  final WineRuntimeDetector _wineRuntimeDetector;
+  final DirectHelperStarter _directHelperStarter;
+  final ElevatedHelperStarter _elevatedHelperStarter;
+  final File _resultFile;
+  final String _helperExecutable;
+  final Duration confirmationTimeout;
+
+  Future<void> launch(String executable, String gameDirectory) async {
+    if (!Platform.isWindows) {
+      await GamePlatformService._launchGameExecutable(
+        executable,
+        const [],
+        gameDirectory,
+      );
+      return;
+    }
+
+    final internalLauncher =
+        await GamePlatformService.findInternalOfficialLauncher(
+          executable,
+          gameDirectory,
+        );
+    if (internalLauncher == null) {
+      await GamePlatformService._launchGameExecutable(
+        executable,
+        const [],
+        gameDirectory,
+      );
+      return;
+    }
+    final logFile = File(
+      p.join(
+        internalLauncher.parent.path,
+        'UserData',
+        'Log',
+        'NTEGlobalGame.log',
+      ),
+    );
+    final attemptId =
+        '${DateTime.now().toUtc().microsecondsSinceEpoch.toRadixString(16)}-'
+        '${pid.toRadixString(16)}';
+    final arguments = [
+      '--official-ready-play',
+      '--automation-id=$attemptId',
+      '--official-launcher-hex=${_hexUtf8(executable)}',
+      '--internal-launcher-hex=${_hexUtf8(internalLauncher.path)}',
+      '--official-log-hex=${_hexUtf8(logFile.path)}',
+    ];
+
+    await _resultFile.parent.create(recursive: true);
+    if (await _resultFile.exists()) {
+      await _resultFile.delete();
+    }
+
+    if (_wineRuntimeDetector()) {
+      await _directHelperStarter(
+        _helperExecutable,
+        arguments,
+        p.dirname(_helperExecutable),
+      );
+    } else {
+      final exitCode = await _elevatedHelperStarter({
+        ...Platform.environment,
+        'NTE_TRANSLATION_LAUNCHER': _helperExecutable,
+        'NTE_AUTOMATION_ID': attemptId,
+        'NTE_OFFICIAL_LAUNCHER_HEX': _hexUtf8(executable),
+        'NTE_INTERNAL_LAUNCHER_HEX': _hexUtf8(internalLauncher.path),
+        'NTE_OFFICIAL_LOG_HEX': _hexUtf8(logFile.path),
+      });
+      if (exitCode != 0) {
+        throw const GamePlatformException(
+          'A permissão para abrir o launcher oficial foi cancelada ou '
+          'recusada.',
+        );
+      }
+    }
+
+    await _confirmHelperStarted(attemptId);
+  }
+
+  Future<void> _confirmHelperStarted(String attemptId) async {
+    final deadline = DateTime.now().add(confirmationTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (await _resultFile.exists()) {
+        try {
+          final decoded = jsonDecode(await _resultFile.readAsString());
+          if (decoded is Map<String, dynamic>) {
+            if (decoded['attemptId'] != attemptId) {
+              await Future<void>.delayed(const Duration(milliseconds: 100));
+              continue;
+            }
+            final stage = decoded['stage'];
+            final exitCode = decoded['exitCode'];
+            if (stage is String && stage.isNotEmpty) {
+              if (exitCode is int && exitCode >= 10) {
+                throw GamePlatformException(_failureMessage(exitCode, stage));
+              }
+              return;
+            }
+          }
+        } on FormatException {
+          // The native helper may be replacing the tiny JSON file right now.
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    throw const GamePlatformException(
+      'O componente de Play automático não confirmou a inicialização. '
+      'O launcher permanecerá aberto para permitir o diagnóstico.',
+    );
+  }
+
+  static String _failureMessage(int exitCode, String stage) =>
+      switch (exitCode) {
+        10 => 'Os caminhos usados pelo Play automático foram rejeitados.',
+        11 => 'O launcher oficial não pôde ser iniciado automaticamente.',
+        12 => 'O launcher oficial não ficou pronto dentro do tempo limite.',
+        13 => 'O botão Jogar do launcher oficial não pôde ser acionado.',
+        14 => 'O launcher oficial recebeu o comando, mas o jogo não iniciou.',
+        15 => 'Já existe uma tentativa de Play automático em andamento.',
+        16 => 'O Play automático não conseguiu criar seu controle de execução.',
+        _ => 'O Play automático falhou na etapa $stage (código $exitCode).',
+      };
+
+  static Future<void> _startDirectHelper(
+    String executable,
+    List<String> arguments,
+    String workingDirectory,
+  ) async {
+    await Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      mode: ProcessStartMode.detached,
+    );
+  }
+
+  static Future<int> _startElevatedHelper(
+    Map<String, String> environment,
+  ) async {
+    final result = await Process.run(
+      'powershell.exe',
+      const [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r"$ErrorActionPreference='Stop'; $helperArgs='--official-ready-play --automation-id=' + $env:NTE_AUTOMATION_ID + ' --official-launcher-hex=' + $env:NTE_OFFICIAL_LAUNCHER_HEX + ' --internal-launcher-hex=' + $env:NTE_INTERNAL_LAUNCHER_HEX + ' --official-log-hex=' + $env:NTE_OFFICIAL_LOG_HEX; Start-Process -FilePath $env:NTE_TRANSLATION_LAUNCHER -ArgumentList $helperArgs -Verb RunAs -WindowStyle Hidden",
+      ],
+      environment: environment,
+      runInShell: false,
+    );
+    return result.exitCode;
+  }
+
+  static File _defaultResultFile() => File(
+    p.join(
+      Directory.systemTemp.path,
+      'NTE-Translation-Launcher',
+      'official-launch-result.json',
+    ),
+  );
+
+  static String _hexUtf8(String value) => utf8
+      .encode(value)
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
 }
 
 class GamePlatformException implements Exception {

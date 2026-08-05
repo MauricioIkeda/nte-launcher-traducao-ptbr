@@ -41,6 +41,8 @@
   instalação, recibo, executáveis, histórico e trechos de logs protegidos;
 - verifica atualizações do próprio launcher;
 - oferece atualização automática opcional, desativada por padrão;
+- adapta o Play automático ao ambiente: UAC no Windows nativo e execução
+  direta no mesmo prefixo em Wine/Proton, sempre com confirmação do auxiliar;
 - possui instalador, atalhos e desinstalador nativos para Windows.
 
 ## Instalação

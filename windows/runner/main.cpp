@@ -27,7 +27,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  flutter::DartProject project(L"data");
+  const std::wstring executable_directory = GetExecutableDirectory();
+  if (executable_directory.empty() ||
+      !::SetCurrentDirectoryW(executable_directory.c_str())) {
+    ::CoUninitialize();
+    return EXIT_FAILURE;
+  }
+  flutter::DartProject project(executable_directory + L"\\data");
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
