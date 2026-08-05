@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.3.3",
-  "publishedAt": "2026-08-05T03:07:15Z",
+  "version": "1.3.4",
+  "publishedAt": "2026-08-05T06:36:44Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.3/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19504466,
-    "sha256": "423399f0feac88a6e660f169baa767520205cb31302edf194add7f284b4dae4a"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.4/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19524340,
+    "sha256": "fd15ddd6de0edeb0a2935d8836b764f3b579276e29d63242716880c4b5d953b8"
   },
-  "releaseNotes": "Play manual por padrão e automação segura opcional no launcher oficial, sem /autoplay.",
-  "mandatory": false
+  "releaseNotes": "Novo diagnóstico completo em um único arquivo, com ambiente, plataforma, instalação, histórico e logs incorporados.",
+  "mandatory": true
 }
