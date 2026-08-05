@@ -606,6 +606,11 @@ class _UpdatePanel extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           const _RiskNotice(),
+          if (translationIsCurrent &&
+              controller.gamePlatform?.platform == GamePlatform.official) ...[
+            const SizedBox(height: 12),
+            _OfficialLaunchAutomationOption(controller: controller),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -666,6 +671,68 @@ class _UpdatePanel extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfficialLaunchAutomationOption extends StatelessWidget {
+  const _OfficialLaunchAutomationOption({required this.controller});
+
+  final LauncherController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: const Color(0x66101A28),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(
+          color: controller.officialLaunchAutomation
+              ? _cyan.withValues(alpha: .52)
+              : const Color(0x554B657D),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            controller.officialLaunchAutomation
+                ? Icons.smart_display_rounded
+                : Icons.touch_app_outlined,
+            color: controller.officialLaunchAutomation ? _cyan : _muted,
+            size: 20,
+          ),
+          const SizedBox(width: 11),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'PLAY AUTOMÁTICO NO LAUNCHER OFICIAL',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .65,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Desativado por padrão. Quando ligado, espera o NTE ficar '
+                  'pronto e aciona Play; desligado, você clica manualmente.',
+                  style: TextStyle(color: _muted, fontSize: 8, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: controller.officialLaunchAutomation,
+            onChanged: controller.isBusy
+                ? null
+                : controller.setOfficialLaunchAutomation,
           ),
         ],
       ),

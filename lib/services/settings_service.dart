@@ -18,6 +18,10 @@ abstract interface class LauncherSettings {
   Future<bool> getOfficialAutoplay();
 
   Future<void> setOfficialAutoplay(bool value);
+
+  Future<bool> getOfficialLaunchAutomation();
+
+  Future<void> setOfficialLaunchAutomation(bool value);
 }
 
 class SettingsService implements LauncherSettings {
@@ -25,6 +29,7 @@ class SettingsService implements LauncherSettings {
   static const _installedVersionKey = 'installed_version';
   static const _automaticLauncherUpdatesKey = 'automatic_launcher_updates';
   static const _officialAutoplayKey = 'official_autoplay';
+  static const _officialLaunchAutomationKey = 'official_launch_automation_v2';
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
@@ -65,4 +70,13 @@ class SettingsService implements LauncherSettings {
   @override
   Future<void> setOfficialAutoplay(bool value) =>
       _preferences.setBool(_officialAutoplayKey, value);
+
+  @override
+  Future<bool> getOfficialLaunchAutomation() async {
+    return await _preferences.getBool(_officialLaunchAutomationKey) ?? false;
+  }
+
+  @override
+  Future<void> setOfficialLaunchAutomation(bool value) =>
+      _preferences.setBool(_officialLaunchAutomationKey, value);
 }

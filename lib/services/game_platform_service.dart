@@ -9,6 +9,8 @@ import 'installation_service.dart';
 typedef ExternalUriLauncher = Future<bool> Function(Uri uri);
 typedef OfficialLauncherAutomation =
     Future<void> Function(String executable, String gameDirectory);
+typedef OfficialLauncherOpener =
+    Future<void> Function(String executable, String gameDirectory);
 
 enum GamePlatform { epicGames, steam, official }
 
@@ -30,17 +32,21 @@ class GamePlatformService {
     List<Directory>? steamRoots,
     ExternalUriLauncher? externalUriLauncher,
     OfficialLauncherAutomation? officialLauncherAutomation,
+    OfficialLauncherOpener? officialLauncherOpener,
   }) : _epicManifestDirectory =
            epicManifestDirectory ?? _defaultEpicManifestDirectory(),
        _steamRootsOverride = steamRoots,
        _externalUriLauncher = externalUriLauncher ?? _launchExternalUri,
        _officialLauncherAutomation =
-           officialLauncherAutomation ?? _launchOfficialWhenReady;
+           officialLauncherAutomation ?? _launchOfficialWhenReady,
+       _officialLauncherOpener =
+           officialLauncherOpener ?? _openOfficialLauncher;
 
   final Directory _epicManifestDirectory;
   final List<Directory>? _steamRootsOverride;
   final ExternalUriLauncher _externalUriLauncher;
   final OfficialLauncherAutomation _officialLauncherAutomation;
+  final OfficialLauncherOpener _officialLauncherOpener;
 
   Future<GamePlatformInfo> detect(String gameDirectory) async {
     final epic = await _detectEpic(gameDirectory);
@@ -63,7 +69,11 @@ class GamePlatformService {
     );
   }
 
-  Future<void> launch(GamePlatformInfo info, String gameDirectory) async {
+  Future<void> launch(
+    GamePlatformInfo info,
+    String gameDirectory, {
+    bool automateOfficialPlay = false,
+  }) async {
     switch (info.platform) {
       case GamePlatform.epicGames:
       case GamePlatform.steam:
@@ -83,11 +93,15 @@ class GamePlatformService {
           );
         }
         // Never use /autoplay: it can start HTGame before local resources are
-        // ready and remove character voices. The elevated helper opens the
-        // official launcher normally, waits for its explicit ready marker and
-        // only then presses Play. If the helper is unavailable, it safely
-        // falls back to opening the official launcher for a manual click.
-        await _officialLauncherAutomation(executable.path, gameDirectory);
+        // ready and remove character voices. Manual Play is the conservative
+        // default. When explicitly enabled, the elevated helper opens the
+        // official launcher normally, waits for its ready marker and presses
+        // Play only after the launcher has completed preparation.
+        if (automateOfficialPlay) {
+          await _officialLauncherAutomation(executable.path, gameDirectory);
+        } else {
+          await _officialLauncherOpener(executable.path, gameDirectory);
+        }
     }
   }
 
@@ -339,6 +353,11 @@ class GamePlatformService {
       );
     }
   }
+
+  static Future<void> _openOfficialLauncher(
+    String executable,
+    String gameDirectory,
+  ) => _launchGameExecutable(executable, const [], gameDirectory);
 
   static String _hexUtf8(String value) => utf8
       .encode(value)
