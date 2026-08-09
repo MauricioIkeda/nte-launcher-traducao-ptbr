@@ -4,6 +4,13 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+namespace {
+
+constexpr UINT_PTR kStartupVisibilityTimer = 1;
+constexpr UINT kStartupVisibilityTimeoutMs = 3000;
+
+}  // namespace
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -27,7 +34,18 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
+  // Normally the top-level window is shown only after Flutter renders its
+  // first frame, avoiding a blank startup flash. Wine/Proton can occasionally
+  // delay that frame while a platform channel is initializing, leaving a live
+  // process with no visible window. Keep the normal path, but never remain
+  // invisible indefinitely.
+  ::SetTimer(GetHandle(), kStartupVisibilityTimer,
+             kStartupVisibilityTimeoutMs, nullptr);
+
+  flutter_controller_->engine()->SetNextFrameCallback([this]() {
+    if (GetHandle() != nullptr) {
+      ::KillTimer(GetHandle(), kStartupVisibilityTimer);
+    }
     this->Show();
   });
 
@@ -40,6 +58,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (GetHandle() != nullptr) {
+    ::KillTimer(GetHandle(), kStartupVisibilityTimer);
+  }
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -51,6 +72,14 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_TIMER && wparam == kStartupVisibilityTimer) {
+    ::KillTimer(hwnd, kStartupVisibilityTimer);
+    if (!::IsWindowVisible(hwnd)) {
+      Show();
+    }
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
