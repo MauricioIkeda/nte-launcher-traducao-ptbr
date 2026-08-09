@@ -31,10 +31,16 @@ const _green = Color(0xFF69E09D);
 const _ink = Color(0xFF07182B);
 const _muted = Color(0xFFA9B9C9);
 
-Future<void> main(List<String> arguments) async {
+void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
-  await TrustedHttpClientFactory.initialize();
-  final paths = await AppPaths.create();
+  runApp(LauncherBootstrap(arguments: arguments));
+}
+
+Future<LauncherController> _initializeLauncher(List<String> arguments) async {
+  await TrustedHttpClientFactory.initialize().timeout(
+    const Duration(seconds: 15),
+  );
+  final paths = await AppPaths.create().timeout(const Duration(seconds: 15));
   final log = LauncherLog(paths.logFile);
   final integrity = FileIntegrityService();
   final safePaths = SafePathService();
@@ -53,7 +59,7 @@ Future<void> main(List<String> arguments) async {
     log: log,
   );
   final elevation = ElevationService(log);
-  final controller = LauncherController(
+  return LauncherController(
     paths: paths,
     log: log,
     appUpdates: AppUpdateService(paths, log),
@@ -77,7 +83,153 @@ Future<void> main(List<String> arguments) async {
     ),
     autoInstall: arguments.contains('--install'),
   );
-  runApp(NteLauncherApp(controller: controller));
+}
+
+class LauncherBootstrap extends StatefulWidget {
+  const LauncherBootstrap({
+    super.key,
+    required this.arguments,
+    this.initializer,
+  });
+
+  final List<String> arguments;
+  final Future<LauncherController> Function(List<String> arguments)?
+  initializer;
+
+  @override
+  State<LauncherBootstrap> createState() => _LauncherBootstrapState();
+}
+
+class _LauncherBootstrapState extends State<LauncherBootstrap> {
+  late Future<LauncherController> _initialization;
+
+  @override
+  void initState() {
+    super.initState();
+    _startInitialization();
+  }
+
+  void _startInitialization() {
+    final initializer = widget.initializer ?? _initializeLauncher;
+    final arguments = List<String>.unmodifiable(widget.arguments);
+    _initialization = initializer(arguments);
+  }
+
+  void _retry() {
+    setState(_startInitialization);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<LauncherController>(
+      future: _initialization,
+      builder: (context, snapshot) {
+        final controller = snapshot.data;
+        if (controller != null) {
+          return NteLauncherApp(controller: controller);
+        }
+        return MaterialApp(
+          title: 'NTE Launcher Tradução PT-BR',
+          debugShowCheckedModeBanner: false,
+          theme: _launcherTheme(),
+          home: _LauncherStartupPage(
+            error: snapshot.hasError ? snapshot.error : null,
+            onRetry: _retry,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LauncherStartupPage extends StatelessWidget {
+  const _LauncherStartupPage({required this.error, required this.onRetry});
+
+  final Object? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = error != null;
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF07182B), Color(0xFF10263A)],
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    failed
+                        ? Icons.warning_amber_rounded
+                        : Icons.translate_rounded,
+                    size: 64,
+                    color: failed ? _yellow : _cyan,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    failed
+                        ? 'Não foi possível iniciar o launcher'
+                        : 'Iniciando o launcher…',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    failed
+                        ? 'A preparação inicial demorou demais ou encontrou '
+                              'um erro. No Wine/Proton, confira também se o '
+                              'prefixo permite acesso à pasta de dados.'
+                        : 'Preparando certificados e dados locais. Isso deve '
+                              'levar apenas alguns segundos.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: _muted, height: 1.5),
+                  ),
+                  if (failed) ...[
+                    const SizedBox(height: 12),
+                    SelectableText(
+                      error.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFFFA7B5),
+                        fontFamily: 'Consolas',
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Tentar novamente'),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 28),
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class NteLauncherApp extends StatelessWidget {
@@ -90,28 +242,32 @@ class NteLauncherApp extends StatelessWidget {
     return MaterialApp(
       title: 'NTE Launcher Tradução PT-BR',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        fontFamily: 'Segoe UI',
-        colorScheme: const ColorScheme.dark(
-          primary: _cyan,
-          secondary: _coral,
-          surface: Color(0xFF101C2A),
-          error: Color(0xFFFF6B81),
-        ),
-        scaffoldBackgroundColor: _ink,
-        splashFactory: InkSparkle.splashFactory,
-        tooltipTheme: const TooltipThemeData(
-          decoration: BoxDecoration(
-            color: Color(0xEE101C2A),
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-          ),
-          textStyle: TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      ),
+      theme: _launcherTheme(),
       home: LauncherPage(controller: controller),
     );
   }
+}
+
+ThemeData _launcherTheme() {
+  return ThemeData(
+    brightness: Brightness.dark,
+    fontFamily: 'Segoe UI',
+    colorScheme: const ColorScheme.dark(
+      primary: _cyan,
+      secondary: _coral,
+      surface: Color(0xFF101C2A),
+      error: Color(0xFFFF6B81),
+    ),
+    scaffoldBackgroundColor: _ink,
+    splashFactory: InkSparkle.splashFactory,
+    tooltipTheme: const TooltipThemeData(
+      decoration: BoxDecoration(
+        color: Color(0xEE101C2A),
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      textStyle: TextStyle(color: Colors.white, fontSize: 12),
+    ),
+  );
 }
 
 class LauncherPage extends StatefulWidget {

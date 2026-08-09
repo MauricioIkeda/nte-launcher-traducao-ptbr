@@ -18,6 +18,18 @@ Para erros ou sugestões de tradução, não é necessário exportar o diagnóst
 Informe o texto atual, a sugestão, o contexto e, se possível, uma captura de
 tela.
 
+## O launcher abriu, mas a janela não apareceu
+
+O launcher não minimiza para a bandeja. A partir da versão 1.3.6, ele mostra
+imediatamente uma tela de inicialização e informa quando a preparação de
+certificados ou da pasta de dados falha. Em Wine/Proton, use **Tentar
+novamente** e confira se o prefixo permite acesso à pasta de dados.
+
+Se o problema continuar, informe também a versão do Wine/Proton, a distribuição
+Linux, o ambiente gráfico e como o executável foi iniciado (Lutris, Bottles,
+Steam ou terminal). Esses dados distinguem uma falha de inicialização do
+launcher de uma janela ocultada pelo gerenciador de janelas.
+
 O diagnóstico é um único `diagnostico.json` autocontido. Ele reúne versões,
 sistema operacional, indicadores de Wine/Proton, origem Steam/Epic/oficial,
 estado e recibo da tradução, executáveis, última tentativa, histórico e trechos
