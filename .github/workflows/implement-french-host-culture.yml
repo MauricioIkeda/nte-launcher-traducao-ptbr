@@ -1,0 +1,73 @@
+name: Implement French host culture
+
+on:
+  push:
+    branches: [feat/french-host-culture]
+    paths:
+      - lib/services/game_language_service.dart
+      - tool/implement_french_host_culture.py
+      - tool/run_french_host_culture_patch.py
+      - .github/workflows/implement-french-host-culture.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: feat/french-host-culture
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Apply implementation
+        run: python tool/run_french_host_culture_patch.py
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Format implementation
+        run: dart format lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: |
+          flutter test
+          flutter test integration_test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Check whitespace
+        shell: bash
+        run: git diff --check
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No implementation changes were produced."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib test docs/FRENCH_HOST_CULTURE.md
+          git commit -m "feat: switch French-hosted PT-BR installs automatically"
+          git push origin HEAD:feat/french-host-culture
