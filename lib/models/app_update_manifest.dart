@@ -72,6 +72,9 @@ class AppUpdateManifest {
     return false;
   }
 
+  bool shouldInstallAutomatically(bool userPreference) =>
+      mandatory || userPreference;
+
   static List<int> _parts(String value) {
     final match = _semanticVersion.firstMatch(value);
     if (match == null) {

@@ -168,6 +168,37 @@ def validate_game_build_id(value: Any) -> str | None:
     return text
 
 
+def validate_localization(value: Any) -> dict[str, Any]:
+    data = _require_object(value, "localization")
+    expected_fields = {
+        "sourceCulture",
+        "installationCulture",
+        "targetLanguage",
+        "hostCompatible",
+        "hostLocresSha256",
+    }
+    if set(data) != expected_fields:
+        raise ContractError("localization: campos inesperados ou ausentes.")
+    source = _require_string(data.get("sourceCulture"), "localization.sourceCulture")
+    installation = _require_string(
+        data.get("installationCulture"), "localization.installationCulture"
+    )
+    target = _require_string(data.get("targetLanguage"), "localization.targetLanguage")
+    if source != "en" or installation != "fr" or target != "pt-BR":
+        raise ContractError("localization: contrato de culturas não autorizado.")
+    if data.get("hostCompatible") is not True:
+        raise ContractError("localization.hostCompatible: esperado true.")
+    return {
+        "sourceCulture": source,
+        "installationCulture": installation,
+        "targetLanguage": target,
+        "hostCompatible": True,
+        "hostLocresSha256": normalize_sha256(
+            data.get("hostLocresSha256"), "localization.hostLocresSha256"
+        ),
+    }
+
+
 def validate_dispatch_payload(payload: Any) -> dict[str, Any]:
     data = _require_object(payload, "client_payload")
     repository = _require_string(data.get("repository"), "repository")
@@ -492,6 +523,11 @@ def validate_public_manifest(
     elif require_source_identity:
         raise ContractError("sourceHash: campo obrigatório ausente.")
     game_build_id = validate_game_build_id(data.get("gameBuildId"))
+    localization = (
+        validate_localization(data["localization"])
+        if "localization" in data
+        else None
+    )
     if require_source_identity:
         assert source_hash is not None
         match = TAG_PATTERN.fullmatch(tag)
@@ -560,6 +596,8 @@ def validate_public_manifest(
         result["gameBuildId"] = game_build_id
     if source_hash is not None:
         result["sourceHash"] = source_hash
+    if localization is not None:
+        result["localization"] = localization
     result["files"] = files
     return result
 
@@ -667,6 +705,11 @@ def reconstruct_manifest_from_release(
         "publishedAt": manifest["publishedAt"],
         "gameBuildId": manifest.get("gameBuildId"),
         "sourceHash": manifest["sourceHash"],
+        **(
+            {"localization": manifest["localization"]}
+            if "localization" in manifest
+            else {}
+        ),
         "files": reconstructed_files,
     }
 
@@ -731,11 +774,16 @@ def compare_candidate(
             raise RegressionError(
                 "regressão bloqueada: datas iguais com versões diferentes."
             )
-        if canonical_bytes(current) != canonical_bytes(candidate):
-            raise RegressionError(
-                "imutabilidade violada: mesma versão possui conteúdo diferente."
-            )
-        return "already-current"
+        if canonical_bytes(current) == canonical_bytes(candidate):
+            return "already-current"
+        if "localization" not in current and "localization" in candidate:
+            candidate_without_localization = dict(candidate)
+            candidate_without_localization.pop("localization", None)
+            if canonical_bytes(current) == canonical_bytes(candidate_without_localization):
+                return "metadata-enriched"
+        raise RegressionError(
+            "imutabilidade violada: mesma versão possui conteúdo diferente."
+        )
     if candidate_version == current_version:
         raise RegressionError(
             "imutabilidade violada: mesma versão possui data diferente."
@@ -752,7 +800,7 @@ def atomic_apply_candidate(
     normalized_candidate = validate_public_manifest(candidate)
     current = load_current_manifest(output)
     decision = compare_candidate(current, normalized_candidate)
-    changed = decision == "updated"
+    changed = decision in {"updated", "metadata-enriched"}
     if changed:
         output.parent.mkdir(parents=True, exist_ok=True)
         temporary = output.with_name(output.name + ".nte-new")

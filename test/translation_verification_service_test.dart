@@ -8,6 +8,7 @@ import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart
 import 'package:nte_translation_launcher/models/translation_installation.dart';
 import 'package:nte_translation_launcher/models/translation_manifest.dart';
 import 'package:nte_translation_launcher/services/file_integrity_service.dart';
+import 'package:nte_translation_launcher/services/game_language_service.dart';
 import 'package:nte_translation_launcher/services/receipt_repository.dart';
 import 'package:nte_translation_launcher/services/safe_path_service.dart';
 import 'package:nte_translation_launcher/services/translation_verification_service.dart';
@@ -57,6 +58,51 @@ void main() {
     expect(result.validFiles, hasLength(2));
     expect(progress, [1, 2]);
   });
+
+  test(
+    'migrates a current pre-localization receipt to the French host culture',
+    () async {
+      await _writeManifestFiles(game, manifest, contents);
+      await _writeReceipt(receipts, game, manifest, contents);
+      final hostedManifest = TranslationManifest(
+        schemaVersion: manifest.schemaVersion,
+        translationVersion: manifest.translationVersion,
+        publishedAt: manifest.publishedAt,
+        gameBuildId: manifest.gameBuildId,
+        sourceHash: manifest.sourceHash,
+        localization: const TranslationLocalization(
+          sourceCulture: 'en',
+          installationCulture: 'fr',
+          targetLanguage: 'pt-BR',
+          hostCompatible: true,
+          hostLocresSha256:
+              'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        ),
+        files: manifest.files,
+      );
+      final fakeLanguage = _FakeGameLanguageService(sandbox.path);
+      final safePaths = SafePathService();
+      final log = LauncherLog(paths.logFile);
+      final hostedVerifier = TranslationVerificationService(
+        integrity: FileIntegrityService(),
+        receipts: receipts,
+        safePaths: safePaths,
+        log: log,
+        gameLanguage: fakeLanguage,
+      );
+
+      final result = await hostedVerifier.verify(
+        loadedManifest: loaded(hostedManifest),
+        gameDirectory: game.path,
+      );
+      final migrated = await receipts.read(game.path);
+
+      expect(result.status, TranslationInstallationStatus.installedCurrent);
+      expect(fakeLanguage.ensureCultureCalls, 1);
+      expect(migrated.receipt?.textLanguage?.requestedCulture, 'fr');
+      expect(migrated.receipt?.textLanguage?.key, 'NteHybridCulture');
+    },
+  );
 
   test('reports not installed when no translation file exists', () async {
     final result = await verifier.verify(
@@ -296,6 +342,31 @@ void main() {
     );
     expect(result.status, TranslationInstallationStatus.unverifiable);
   });
+}
+
+class _FakeGameLanguageService extends GameLanguageService {
+  _FakeGameLanguageService(this.root) : super(localAppData: root);
+
+  final String root;
+  int ensureCultureCalls = 0;
+
+  @override
+  Future<LanguageSwitchResult> ensureCulture(
+    String culture, {
+    TextLanguageReceipt? previous,
+  }) async {
+    ensureCultureCalls++;
+    return LanguageSwitchResult(
+      changed: true,
+      receipt: TextLanguageReceipt(
+        configPath: p.join(root, 'GameUserSettings.ini'),
+        key: 'NteHybridCulture',
+        previousRawValue: '{"globalLanguage":"en"}',
+        previousValue: 'en',
+        requestedCulture: culture,
+      ),
+    );
+  }
 }
 
 Future<void> _writeReceipt(

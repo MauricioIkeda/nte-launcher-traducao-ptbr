@@ -109,6 +109,8 @@ class LauncherController extends ChangeNotifier {
   bool get offlineMode => loadedManifest?.isOffline ?? false;
   String? get installedVersion =>
       verification.detectedVersion ?? verification.receiptVersion;
+  bool get mandatoryLauncherUpdatePending =>
+      availableAppUpdate?.mandatory == true;
   double get progress {
     if (status == LauncherStatus.verifying) {
       return verificationTotalFiles <= 0
@@ -131,6 +133,7 @@ class LauncherController extends ChangeNotifier {
       status == LauncherStatus.repairing ||
       status == LauncherStatus.removing;
   bool get canChangeGameDirectory =>
+      !mandatoryLauncherUpdatePending &&
       !validatingGameDirectory &&
       !updatingLauncher &&
       status != LauncherStatus.starting &&
@@ -151,13 +154,17 @@ class LauncherController extends ChangeNotifier {
   bool get hasUnmanagedChanges =>
       verification.needsRepair && verification.receiptVersion == null;
   bool get canInstall =>
+      !mandatoryLauncherUpdatePending &&
       !isBusy &&
       manifest != null &&
       gameDirectory != null &&
       !hasUnmanagedChanges &&
       verification.status != TranslationInstallationStatus.unverifiable;
   bool get canRemove =>
-      !isBusy && gameDirectory != null && verification.receiptVersion != null;
+      !mandatoryLauncherUpdatePending &&
+      !isBusy &&
+      gameDirectory != null &&
+      verification.receiptVersion != null;
 
   Future<void> initialize() async {
     await diagnostics.record(
@@ -240,7 +247,11 @@ class LauncherController extends ChangeNotifier {
       if (!_isCurrent(operation)) {
         return;
       }
-      if (automaticLauncherUpdates && availableAppUpdate != null) {
+      final launcherUpdate = availableAppUpdate;
+      if (launcherUpdate != null &&
+          launcherUpdate.shouldInstallAutomatically(
+            automaticLauncherUpdates,
+          )) {
         await installLauncherUpdate();
         return;
       }
@@ -461,6 +472,10 @@ class LauncherController extends ChangeNotifier {
   }
 
   Future<void> installOrUpdate({bool repair = false}) async {
+    if (mandatoryLauncherUpdatePending) {
+      await installLauncherUpdate();
+      return;
+    }
     final selectedManifest = manifest;
     final selectedGameDirectory = gameDirectory;
     final selectedLoadedManifest = loadedManifest;
@@ -666,6 +681,10 @@ class LauncherController extends ChangeNotifier {
   }
 
   Future<void> launchGame({bool allowInvalidTranslation = false}) async {
+    if (mandatoryLauncherUpdatePending) {
+      await installLauncherUpdate();
+      return;
+    }
     final directory = gameDirectory;
     if (directory == null || isBusy) {
       return;

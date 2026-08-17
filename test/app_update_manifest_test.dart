@@ -4,7 +4,10 @@ import 'package:nte_translation_launcher/models/app_update_manifest.dart';
 const installerHash =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-Map<String, dynamic> manifestJson({String version = '1.2.3'}) => {
+Map<String, dynamic> manifestJson({
+  String version = '1.2.3',
+  bool mandatory = false,
+}) => {
   'schemaVersion': 1,
   'version': version,
   'publishedAt': '2026-07-27T12:00:00Z',
@@ -16,7 +19,7 @@ Map<String, dynamic> manifestJson({String version = '1.2.3'}) => {
     'sha256': installerHash,
   },
   'releaseNotes': 'Correções e melhorias.',
-  'mandatory': false,
+  'mandatory': mandatory,
 };
 
 void main() {
@@ -33,6 +36,18 @@ void main() {
 
     expect(manifest.isNewerThan('1.2.3'), isFalse);
     expect(manifest.isNewerThan('2.0.0'), isFalse);
+  });
+
+  test('mandatory update ignores the automatic-update preference', () {
+    final mandatory = AppUpdateManifest.fromJson(
+      manifestJson(mandatory: true),
+    );
+    final optional = AppUpdateManifest.fromJson(manifestJson());
+
+    expect(mandatory.shouldInstallAutomatically(false), isTrue);
+    expect(mandatory.shouldInstallAutomatically(true), isTrue);
+    expect(optional.shouldInstallAutomatically(false), isFalse);
+    expect(optional.shouldInstallAutomatically(true), isTrue);
   });
 
   test('rejects installer URLs outside GitHub HTTPS', () {

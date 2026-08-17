@@ -139,7 +139,7 @@ class TranslationVerificationService {
       );
     }
 
-    final receipt = receiptResult.receipt;
+    var receipt = receiptResult.receipt;
     if (unverifiable.isNotEmpty) {
       return _result(
         TranslationInstallationStatus.unverifiable,
@@ -151,6 +151,14 @@ class TranslationVerificationService {
       );
     }
     if (valid.length == manifest.files.length) {
+      if (manifest.localization?.installationCulture == 'fr' &&
+          receipt != null &&
+          receipt.textLanguage == null) {
+        receipt = await _migrateHostedLanguageReceipt(
+          receipt,
+          gameDirectory,
+        );
+      }
       return _result(
         TranslationInstallationStatus.installedCurrent,
         receipt,
@@ -273,6 +281,50 @@ class TranslationVerificationService {
       modified,
       unverifiable,
     );
+  }
+
+  Future<InstallReceipt> _migrateHostedLanguageReceipt(
+    InstallReceipt receipt,
+    String gameDirectory,
+  ) async {
+    try {
+      final prepared = await gameLanguage.ensureCulture('fr');
+      final textLanguage = prepared.receipt;
+      if (textLanguage == null) {
+        await log.info(
+          'A instalação hospedada em fr foi detectada, mas a cultura não '
+          'pôde ser preparada automaticamente: '
+          '${prepared.reason ?? 'motivo desconhecido'}.',
+        );
+        return receipt;
+      }
+      final migrated = InstallReceipt(
+        schemaVersion: receipt.schemaVersion,
+        translationVersion: receipt.translationVersion,
+        installedAt: receipt.installedAt,
+        gameDirectory: receipt.gameDirectory,
+        manifestSha256: receipt.manifestSha256,
+        manifestPublishedAt: receipt.manifestPublishedAt,
+        gameBuildId: receipt.gameBuildId,
+        sourceHash: receipt.sourceHash,
+        textLanguage: textLanguage,
+        files: receipt.files,
+      );
+      await receipts.write(gameDirectory, migrated);
+      await log.info(
+        'Instalação existente migrada para cultura hospedada: launcher '
+        'oficial em inglês e jogo no slot francês/PT-BR.',
+      );
+      return migrated;
+    } catch (error, stackTrace) {
+      await log.error(
+        'Não foi possível migrar automaticamente a cultura da instalação '
+        'existente.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return receipt;
+    }
   }
 
   Future<({bool allValid})> _verifyReceiptFiles(
