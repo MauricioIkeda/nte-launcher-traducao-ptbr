@@ -103,4 +103,71 @@ void main() {
     final bytes = await ini.readAsBytes();
     expect(bytes.take(3), [0xef, 0xbb, 0xbf]);
   });
+
+  test(
+    'switches encrypted NTE Language and Locale while preserving AudioCulture',
+    () async {
+      const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
+      const languageFr = 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=';
+      const localeEn = 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=';
+      const localeFr = 'NeXLYGL6ZN14QCC1BFkXxgl+l+fR2Cyd408uYnmPbXw=';
+      const audioEn = '7aOPkDZRDTgBvUg9h7cDdipgWQ+H4PlLLgY7u24Ds2s=';
+      await ini.writeAsString(
+        [
+          'hgYm+rW2UfT0rvvTOSWS68+FUFKqAvf8xlSH/XFPSr0=',
+          languageEn,
+          localeEn,
+          'TS6YLLzqMMV/QZlgo11R3Db+MAWx7QyjbmMpgf6+kFblbepFJkqnjlK9nhOxrb98',
+          languageEn,
+          audioEn,
+          '',
+        ].join('\r\n'),
+      );
+
+      final result = await service.ensureCulture('fr');
+      expect(result.changed, isTrue);
+      expect(result.receipt?.key, 'NteEncryptedCulture');
+      expect(result.receipt?.previousValue, 'en');
+
+      final current = await ini.readAsString();
+      expect(RegExp(RegExp.escape(languageFr)).allMatches(current).length, 2);
+      expect(RegExp(RegExp.escape(localeFr)).allMatches(current).length, 1);
+      expect(current, isNot(contains(languageEn)));
+      expect(current, isNot(contains(localeEn)));
+      expect(current, contains(audioEn));
+
+      final restored = await service.restore(result.receipt);
+      expect(restored.restored, isTrue);
+      final original = await ini.readAsString();
+      expect(RegExp(RegExp.escape(languageEn)).allMatches(original).length, 2);
+      expect(RegExp(RegExp.escape(localeEn)).allMatches(original).length, 1);
+      expect(original, contains(audioEn));
+    },
+  );
+
+  test('encrypted restore preserves a manual language change', () async {
+    const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
+    const localeEn = 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=';
+    const languageFr = 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=';
+    const localeFr = 'NeXLYGL6ZN14QCC1BFkXxgl+l+fR2Cyd408uYnmPbXw=';
+    const languageDe = 'kInAsIbW2RO39jtDoqxgRWymGOWDheFjSanKLCRlfZ4=';
+    const localeDe = 'kAx51uJGW9PhnQsypySd8gl+l+fR2Cyd408uYnmPbXw=';
+
+    await ini.writeAsString(
+      '$languageEn\r\n$localeEn\r\n$languageEn\r\n',
+    );
+    final changed = await service.ensureCulture('fr');
+
+    final current = (await ini.readAsString())
+        .replaceAll(languageFr, languageDe)
+        .replaceAll(localeFr, localeDe);
+    await ini.writeAsString(current);
+
+    final restored = await service.restore(changed.receipt);
+    expect(restored.restored, isFalse);
+    expect(restored.preservedUserChoice, isTrue);
+    final preserved = await ini.readAsString();
+    expect(preserved, contains(languageDe));
+    expect(preserved, contains(localeDe));
+  });
 }
