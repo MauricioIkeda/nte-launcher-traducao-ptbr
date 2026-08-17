@@ -616,6 +616,7 @@ class GameLanguageService {
     final base = p.join(local, 'HT');
     final roots = [
       p.join(base, 'Saved_Global', 'Config', 'Windows'),
+      p.join(base, 'Saved_GlobalEpic', 'Config', 'Windows'),
       p.join(base, 'Saved_GlobalSteam', 'Config', 'Windows'),
       p.join(base, 'Saved', 'Config', 'Windows'),
       p.join(base, 'Saved', 'Config', 'WindowsClient'),
@@ -635,6 +636,7 @@ class GameLanguageService {
     final candidate = p.normalize(p.absolute(value));
     final roots = [
       p.join(local, 'HT', 'Saved_Global', 'Config', 'Windows'),
+      p.join(local, 'HT', 'Saved_GlobalEpic', 'Config', 'Windows'),
       p.join(local, 'HT', 'Saved_GlobalSteam', 'Config', 'Windows'),
       p.join(local, 'HT', 'Saved', 'Config', 'Windows'),
       p.join(local, 'HT', 'Saved', 'Config', 'WindowsClient'),
