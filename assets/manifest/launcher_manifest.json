@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.3.6",
-  "publishedAt": "2026-08-09T08:16:51Z",
+  "version": "1.4.0",
+  "publishedAt": "2026-08-17T06:26:48Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.3.6/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19532639,
-    "sha256": "39d0d7f026cece4943ca39a57c5ac8934ce001cb7dbf6ee797bb4de75da4f6b7"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.0/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19551051,
+    "sha256": "c380ec9881bc8fb9fa2b54ed8885b97197bbc8c9907f45cf34967f48e69d377e"
   },
-  "releaseNotes": "Corrige a janela invisível na inicialização e melhora a recuperação no Wine/Proton.",
-  "mandatory": false
+  "releaseNotes": "Suporte ao PT-BR hospedado no slot francês, mantendo o launcher oficial em inglês e preparando automaticamente o NTE para a tradução.",
+  "mandatory": true
 }
