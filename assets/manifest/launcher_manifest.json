@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.0",
-  "publishedAt": "2026-08-17T06:26:48Z",
+  "version": "1.4.1",
+  "publishedAt": "2026-08-17T07:00:31Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.0/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19551051,
-    "sha256": "c380ec9881bc8fb9fa2b54ed8885b97197bbc8c9907f45cf34967f48e69d377e"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.1/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19552295,
+    "sha256": "09b609dd1dd2c8e656f427804cca1a3fd30614d5355225ee1eb45e0191b5f8d9"
   },
-  "releaseNotes": "Suporte ao PT-BR hospedado no slot francês, mantendo o launcher oficial em inglês e preparando automaticamente o NTE para a tradução.",
+  "releaseNotes": "Hotfix crítico: atualizações obrigatórias agora são aplicadas automaticamente e o PT-BR hospedado no slot francês é detectado e preparado corretamente.",
   "mandatory": true
 }
