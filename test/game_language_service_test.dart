@@ -105,7 +105,7 @@ void main() {
   });
 
   test(
-    'switches encrypted NTE Language and Locale while preserving AudioCulture',
+    'prepares encrypted NTE with English launcher and French game text',
     () async {
       const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
       const languageFr = 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=';
@@ -126,14 +126,14 @@ void main() {
 
       final result = await service.ensureCulture('fr');
       expect(result.changed, isTrue);
-      expect(result.receipt?.key, 'NteEncryptedCulture');
+      expect(result.receipt?.key, 'NteHybridCulture');
       expect(result.receipt?.previousValue, 'en');
 
       final current = await ini.readAsString();
-      expect(RegExp(RegExp.escape(languageFr)).allMatches(current).length, 2);
-      expect(RegExp(RegExp.escape(localeFr)).allMatches(current).length, 1);
-      expect(current, isNot(contains(languageEn)));
-      expect(current, isNot(contains(localeEn)));
+      expect(RegExp(RegExp.escape(languageEn)).allMatches(current).length, 1);
+      expect(RegExp(RegExp.escape(languageFr)).allMatches(current).length, 1);
+      expect(RegExp(RegExp.escape(localeEn)).allMatches(current).length, 1);
+      expect(current, isNot(contains(localeFr)));
       expect(current, contains(audioEn));
 
       final restored = await service.restore(result.receipt);
@@ -145,11 +145,58 @@ void main() {
     },
   );
 
-  test('encrypted restore preserves a manual language change', () async {
+  test('opening launcher repairs full French state back to hybrid', () async {
+    const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
+    const languageFr = 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=';
+    const localeEn = 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=';
+    const localeFr = 'NeXLYGL6ZN14QCC1BFkXxgl+l+fR2Cyd408uYnmPbXw=';
+
+    await ini.writeAsString(
+      '$languageEn\r\n$localeEn\r\n$languageEn\r\n',
+    );
+    final first = await service.ensureCulture('fr');
+
+    await ini.writeAsString(
+      '$languageFr\r\n$localeFr\r\n$languageFr\r\n',
+    );
+    final prepared = await service.ensureCulture(
+      'fr',
+      previous: first.receipt,
+    );
+
+    expect(prepared.changed, isTrue);
+    expect(prepared.receipt?.previousValue, 'en');
+    final current = await ini.readAsString();
+    expect(RegExp(RegExp.escape(languageEn)).allMatches(current).length, 1);
+    expect(RegExp(RegExp.escape(languageFr)).allMatches(current).length, 1);
+    expect(RegExp(RegExp.escape(localeEn)).allMatches(current).length, 1);
+    expect(current, isNot(contains(localeFr)));
+  });
+
+  test('hybrid restore accepts full French state written by the game', () async {
     const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
     const localeEn = 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=';
     const languageFr = 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=';
     const localeFr = 'NeXLYGL6ZN14QCC1BFkXxgl+l+fR2Cyd408uYnmPbXw=';
+
+    await ini.writeAsString(
+      '$languageEn\r\n$localeEn\r\n$languageEn\r\n',
+    );
+    final changed = await service.ensureCulture('fr');
+    await ini.writeAsString(
+      '$languageFr\r\n$localeFr\r\n$languageFr\r\n',
+    );
+
+    final restored = await service.restore(changed.receipt);
+    expect(restored.restored, isTrue);
+    final current = await ini.readAsString();
+    expect(RegExp(RegExp.escape(languageEn)).allMatches(current).length, 2);
+    expect(RegExp(RegExp.escape(localeEn)).allMatches(current).length, 1);
+  });
+
+  test('encrypted restore preserves a manual language change', () async {
+    const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
+    const localeEn = 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=';
     const languageDe = 'kInAsIbW2RO39jtDoqxgRWymGOWDheFjSanKLCRlfZ4=';
     const localeDe = 'kAx51uJGW9PhnQsypySd8gl+l+fR2Cyd408uYnmPbXw=';
 
@@ -157,11 +204,9 @@ void main() {
       '$languageEn\r\n$localeEn\r\n$languageEn\r\n',
     );
     final changed = await service.ensureCulture('fr');
-
-    final current = (await ini.readAsString())
-        .replaceAll(languageFr, languageDe)
-        .replaceAll(localeFr, localeDe);
-    await ini.writeAsString(current);
+    await ini.writeAsString(
+      '$languageDe\r\n$localeDe\r\n$languageDe\r\n',
+    );
 
     final restored = await service.restore(changed.receipt);
     expect(restored.restored, isFalse);
