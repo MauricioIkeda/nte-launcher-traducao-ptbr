@@ -9,7 +9,7 @@ source = source.replace(
 )
 start = source.index('    path = "test/receipt_repository_test.dart"')
 end = source.index('    path = "test/installation_service_test.dart"', start)
-corrected = r'''    path = "test/receipt_repository_test.dart"
+corrected = r"""    path = "test/receipt_repository_test.dart"
     text = read(path)
     marker = "\n}\n\nFuture<InstallReceipt> _receipt(\n"
     test = r'''
@@ -53,7 +53,7 @@ corrected = r'''    path = "test/receipt_repository_test.dart"
     )
     write(path, text)
 
-'''
+"""
 source = source[:start] + corrected + source[end:]
 namespace = {"__name__": "launcher_patch", "__file__": str(patcher)}
 exec(compile(source, str(patcher), "exec"), namespace)
