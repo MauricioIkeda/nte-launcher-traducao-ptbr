@@ -11,6 +11,7 @@ TranslationManifest testManifest({
   String version = 'nte-auto-20260729-current',
   DateTime? publishedAt,
   List<List<int>>? contents,
+  bool frenchHost = false,
 }) {
   final values =
       contents ??
@@ -22,6 +23,14 @@ TranslationManifest testManifest({
     'schemaVersion': 1,
     'translationVersion': version,
     'publishedAt': (publishedAt ?? DateTime.utc(2026, 7, 29)).toIso8601String(),
+    if (frenchHost)
+      'localization': {
+        'sourceCulture': 'en',
+        'installationCulture': 'fr',
+        'targetLanguage': 'pt-BR',
+        'hostCompatible': true,
+        'hostLocresSha256': 'e' * 64,
+      },
     'files': [
       for (var index = 0; index < values.length; index++)
         {

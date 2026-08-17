@@ -7,6 +7,7 @@ import 'package:nte_translation_launcher/core/app_paths.dart';
 import 'package:nte_translation_launcher/core/launcher_log.dart';
 import 'package:nte_translation_launcher/models/translation_manifest.dart';
 import 'package:nte_translation_launcher/services/file_integrity_service.dart';
+import 'package:nte_translation_launcher/services/game_language_service.dart';
 import 'package:nte_translation_launcher/services/installation_service.dart';
 import 'package:nte_translation_launcher/services/receipt_repository.dart';
 import 'package:nte_translation_launcher/services/safe_path_service.dart';
@@ -93,6 +94,85 @@ void main() {
           contents[index],
         );
       }
+    },
+  );
+
+  test(
+    'French-host install switches text language and uninstall restores it',
+    () async {
+      final configRoot = Directory(
+        p.join(
+          sandbox.path,
+          'local-app-data',
+          'HT',
+          'Saved_Global',
+          'Config',
+          'Windows',
+        ),
+      );
+      await configRoot.create(recursive: true);
+      final ini = File(p.join(configRoot.path, 'GameUserSettings.ini'));
+      await ini.writeAsString(
+        '[User]\nTextLanguage=en\nVoiceLanguage=ja\nQuality=2\n',
+      );
+      final frenchService = InstallationService(
+        paths,
+        LauncherLog(paths.logFile),
+        integrity: FileIntegrityService(),
+        safePaths: SafePathService(),
+        receipts: receipts,
+        gameLanguage: GameLanguageService(
+          localAppData: p.join(sandbox.path, 'local-app-data'),
+        ),
+      );
+      final frenchManifest = testManifest(contents: contents, frenchHost: true);
+      final frenchStage = await createStage(sandbox, frenchManifest, contents);
+
+      await frenchService.install(frenchManifest, frenchStage, game.path);
+      var current = await ini.readAsString();
+      expect(current, contains('TextLanguage=fr'));
+      expect(current, contains('VoiceLanguage=ja'));
+      expect((await receipts.read(game.path)).receipt?.textLanguage, isNotNull);
+
+      await ini.writeAsString(current.replaceAll('Quality=2', 'Quality=4'));
+      final removal = await frenchService.uninstall(game.path);
+      expect(removal.complete, isTrue);
+      current = await ini.readAsString();
+      expect(current, contains('TextLanguage=en'));
+      expect(current, contains('VoiceLanguage=ja'));
+      expect(current, contains('Quality=4'));
+    },
+  );
+
+  test(
+    'legacy manifest without localization metadata does not touch language',
+    () async {
+      final configRoot = Directory(
+        p.join(
+          sandbox.path,
+          'local-app-data',
+          'HT',
+          'Saved_Global',
+          'Config',
+          'Windows',
+        ),
+      );
+      await configRoot.create(recursive: true);
+      final ini = File(p.join(configRoot.path, 'GameUserSettings.ini'));
+      await ini.writeAsString('[User]\nTextLanguage=en\n');
+      final legacyService = InstallationService(
+        paths,
+        LauncherLog(paths.logFile),
+        safePaths: SafePathService(),
+        receipts: receipts,
+        gameLanguage: GameLanguageService(
+          localAppData: p.join(sandbox.path, 'local-app-data'),
+        ),
+      );
+
+      await legacyService.install(manifest, stage, game.path);
+      expect(await ini.readAsString(), contains('TextLanguage=en'));
+      expect((await receipts.read(game.path)).receipt?.textLanguage, isNull);
     },
   );
 

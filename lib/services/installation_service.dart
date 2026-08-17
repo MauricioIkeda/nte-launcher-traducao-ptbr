@@ -8,6 +8,7 @@ import '../core/launcher_log.dart';
 import '../models/install_receipt.dart';
 import '../models/translation_manifest.dart';
 import 'file_integrity_service.dart';
+import 'game_language_service.dart';
 import 'receipt_repository.dart';
 import 'safe_path_service.dart';
 
@@ -18,9 +19,11 @@ class InstallationService {
     FileIntegrityService? integrity,
     SafePathService? safePaths,
     ReceiptRepository? receipts,
+    GameLanguageService? gameLanguage,
     this.afterDestinationReplaced,
   }) : integrity = integrity ?? FileIntegrityService(),
        safePaths = safePaths ?? SafePathService(),
+       gameLanguage = gameLanguage ?? GameLanguageService(),
        receipts =
            receipts ??
            ReceiptRepository(paths, log, safePaths ?? SafePathService());
@@ -42,6 +45,7 @@ class InstallationService {
   final FileIntegrityService integrity;
   final SafePathService safePaths;
   final ReceiptRepository receipts;
+  final GameLanguageService gameLanguage;
   final Future<void> Function(File destination)? afterDestinationReplaced;
 
   Future<bool> hasReceipt(String gameDirectory) async =>
@@ -146,6 +150,7 @@ class InstallationService {
 
       Object? originalError;
       StackTrace? originalStack;
+      LanguageSwitchResult? languageSwitch;
       try {
         final stageOperation = integrity.startOperation();
         for (final asset in manifest.files) {
@@ -299,6 +304,25 @@ class InstallationService {
         journal.state = 'destinations-validated';
         await _writeJournal(transaction, journal);
 
+        final installationCulture = manifest.localization?.installationCulture;
+        if (installationCulture != null) {
+          languageSwitch = await gameLanguage.ensureCulture(
+            installationCulture,
+            previous: previousReceipt?.textLanguage,
+          );
+          if (languageSwitch.changed) {
+            await log.info(
+              'Idioma textual do NTE alterado automaticamente para '
+              '$installationCulture.',
+            );
+          } else if (languageSwitch.reason != null) {
+            await log.info(
+              'Idioma textual não foi alterado automaticamente: '
+              '${languageSwitch.reason}',
+            );
+          }
+        }
+
         await receipts.write(
           gameDirectory,
           InstallReceipt(
@@ -309,6 +333,8 @@ class InstallationService {
             manifestPublishedAt: manifest.publishedAt,
             gameBuildId: manifest.gameBuildId,
             sourceHash: manifest.sourceHash,
+            textLanguage:
+                languageSwitch?.receipt ?? previousReceipt?.textLanguage,
             files: receiptEntries,
           ),
         );
@@ -328,6 +354,17 @@ class InstallationService {
           stackTrace: stackTrace,
         );
         Object? rollbackError;
+        if (languageSwitch?.changed == true) {
+          final languageRollback = await gameLanguage.restore(
+            languageSwitch?.receipt,
+          );
+          if (!languageRollback.restored) {
+            rollbackError = InstallationException(
+              'A restauração do idioma textual ficou incompleta: '
+              '${languageRollback.reason ?? 'motivo desconhecido'}.',
+            );
+          }
+        }
         try {
           journal.state = 'rollback-started';
           await _writeJournal(transaction, journal);
@@ -336,7 +373,7 @@ class InstallationService {
           await _writeJournal(transaction, journal);
           await transaction.delete(recursive: true);
         } catch (error, stackTrace) {
-          rollbackError = error;
+          rollbackError ??= error;
           await log.error(
             'O rollback da instalação ficou incompleto.',
             error: error,
@@ -453,6 +490,22 @@ class InstallationService {
 
       final complete = preserved.isEmpty && failed.isEmpty;
       if (complete) {
+        final languageRestore = await gameLanguage.restore(
+          receipt.textLanguage,
+        );
+        if (languageRestore.restored) {
+          await log.info('Idioma textual anterior do NTE restaurado.');
+        } else if (languageRestore.preservedUserChoice) {
+          await log.info(
+            'Idioma textual atual foi preservado porque o usuário o alterou '
+            'depois da instalação.',
+          );
+        } else if (receipt.textLanguage != null) {
+          await log.info(
+            'Não foi possível restaurar automaticamente o idioma textual: '
+            '${languageRestore.reason ?? 'motivo desconhecido'}.',
+          );
+        }
         await receipts.deleteCurrent(gameDirectory);
         if (await storage.originals.exists()) {
           await storage.originals.delete(recursive: true);
@@ -483,6 +536,7 @@ class InstallationService {
             manifestPublishedAt: receipt.manifestPublishedAt,
             gameBuildId: receipt.gameBuildId,
             sourceHash: receipt.sourceHash,
+            textLanguage: receipt.textLanguage,
             files: receipt.files
                 .where((entry) => unresolved.contains(entry.relativePath))
                 .toList(growable: false),

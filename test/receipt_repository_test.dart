@@ -130,12 +130,33 @@ void main() {
     await storage.receipt.writeAsString(jsonEncode(json));
     expect((await repository.read(gameA.path)).isInvalid, isTrue);
   });
+
+  test('receipt keeps optional text-language rollback metadata', () async {
+    final storage = await repository.storageFor(gameA.path);
+    final receipt = await _receipt(
+      repository,
+      gameA.path,
+      textLanguage: const TextLanguageReceipt(
+        configPath:
+            r'C:\Users\Test\AppData\Local\HT\Saved_Global\Config\Windows\GameUserSettings.ini',
+        key: 'TextLanguage',
+        previousRawValue: 'en',
+        previousValue: 'en',
+        requestedCulture: 'fr',
+      ),
+    );
+    await repository.write(gameA.path, receipt);
+    final read = (await repository.read(gameA.path)).receipt;
+    expect(read?.textLanguage?.previousValue, 'en');
+    expect(await storage.receipt.exists(), isTrue);
+  });
 }
 
 Future<InstallReceipt> _receipt(
   ReceiptRepository repository,
-  String gameDirectory,
-) async {
+  String gameDirectory, {
+  TextLanguageReceipt? textLanguage,
+}) async {
   final storage = await repository.storageFor(gameDirectory);
   return InstallReceipt(
     schemaVersion: InstallReceipt.currentSchemaVersion,
@@ -143,6 +164,7 @@ Future<InstallReceipt> _receipt(
     installedAt: DateTime.utc(2026, 7, 29),
     gameDirectory: storage.gameDirectory,
     manifestPublishedAt: DateTime.utc(2026, 7, 29),
+    textLanguage: textLanguage,
     files: const [
       InstalledFileReceipt(
         relativePath: 'Client/file.bin',

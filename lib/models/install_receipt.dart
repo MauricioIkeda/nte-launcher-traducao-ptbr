@@ -9,6 +9,7 @@ class InstallReceipt {
     this.manifestSha256,
     this.gameBuildId,
     this.sourceHash,
+    this.textLanguage,
   });
 
   static const currentSchemaVersion = 2;
@@ -21,6 +22,7 @@ class InstallReceipt {
   final DateTime manifestPublishedAt;
   final String? gameBuildId;
   final String? sourceHash;
+  final TextLanguageReceipt? textLanguage;
   final List<InstalledFileReceipt> files;
 
   factory InstallReceipt.fromJson(Map<String, dynamic> json) {
@@ -63,6 +65,11 @@ class InstallReceipt {
       manifestPublishedAt: manifestPublishedAt,
       gameBuildId: _optionalString(json['gameBuildId']),
       sourceHash: _optionalHash(json['sourceHash']),
+      textLanguage: json['textLanguage'] == null
+          ? null
+          : TextLanguageReceipt.fromJson(
+              json['textLanguage'] as Map<String, dynamic>,
+            ),
       files: files,
     );
   }
@@ -76,7 +83,49 @@ class InstallReceipt {
     'manifestPublishedAt': manifestPublishedAt.toUtc().toIso8601String(),
     if (gameBuildId != null) 'gameBuildId': gameBuildId,
     if (sourceHash != null) 'sourceHash': sourceHash,
+    if (textLanguage != null) 'textLanguage': textLanguage!.toJson(),
     'files': files.map((file) => file.toJson()).toList(growable: false),
+  };
+}
+
+class TextLanguageReceipt {
+  const TextLanguageReceipt({
+    required this.configPath,
+    required this.key,
+    required this.previousRawValue,
+    required this.previousValue,
+    required this.requestedCulture,
+  });
+
+  final String configPath;
+  final String key;
+  final String previousRawValue;
+  final String previousValue;
+  final String requestedCulture;
+
+  factory TextLanguageReceipt.fromJson(Map<String, dynamic> json) {
+    final value = TextLanguageReceipt(
+      configPath: _requiredString(json, 'configPath'),
+      key: _requiredString(json, 'key'),
+      previousRawValue: _requiredString(json, 'previousRawValue'),
+      previousValue: _requiredString(json, 'previousValue'),
+      requestedCulture: _requiredString(json, 'requestedCulture'),
+    );
+    if (value.requestedCulture != 'fr' ||
+        !RegExp(r'^[A-Za-z0-9_.-]+$').hasMatch(value.key)) {
+      throw const ReceiptFormatException(
+        'Metadados de idioma textual inválidos no recibo.',
+      );
+    }
+    return value;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'configPath': configPath,
+    'key': key,
+    'previousRawValue': previousRawValue,
+    'previousValue': previousValue,
+    'requestedCulture': requestedCulture,
   };
 }
 

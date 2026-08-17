@@ -6,6 +6,7 @@ class TranslationManifest {
     required this.files,
     this.gameBuildId,
     this.sourceHash,
+    this.localization,
   });
 
   final int schemaVersion;
@@ -14,6 +15,7 @@ class TranslationManifest {
   final List<TranslationFile> files;
   final String? gameBuildId;
   final String? sourceHash;
+  final TranslationLocalization? localization;
 
   int get totalBytes => files.fold(0, (total, file) => total + file.size);
 
@@ -24,6 +26,11 @@ class TranslationManifest {
       publishedAt: _utcDate(json['publishedAt']),
       gameBuildId: _optionalNonEmptyString(json['gameBuildId']),
       sourceHash: _optionalSha256(json['sourceHash']),
+      localization: json['localization'] == null
+          ? null
+          : TranslationLocalization.fromJson(
+              json['localization'] as Map<String, dynamic>,
+            ),
       files: (json['files'] as List<dynamic>)
           .map(
             (value) => TranslationFile.fromJson(value as Map<String, dynamic>),
@@ -132,6 +139,46 @@ class TranslationFile {
     }
     if (size <= 0 || !RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256)) {
       throw FormatException('Metadados de integridade inválidos para $name.');
+    }
+  }
+}
+
+class TranslationLocalization {
+  const TranslationLocalization({
+    required this.sourceCulture,
+    required this.installationCulture,
+    required this.targetLanguage,
+    required this.hostCompatible,
+    required this.hostLocresSha256,
+  });
+
+  final String sourceCulture;
+  final String installationCulture;
+  final String targetLanguage;
+  final bool hostCompatible;
+  final String hostLocresSha256;
+
+  factory TranslationLocalization.fromJson(Map<String, dynamic> json) {
+    final value = TranslationLocalization(
+      sourceCulture: json['sourceCulture'] as String,
+      installationCulture: json['installationCulture'] as String,
+      targetLanguage: json['targetLanguage'] as String,
+      hostCompatible: json['hostCompatible'] as bool,
+      hostLocresSha256: (json['hostLocresSha256'] as String).toLowerCase(),
+    );
+    value.validate();
+    return value;
+  }
+
+  void validate() {
+    if (sourceCulture != 'en' ||
+        installationCulture != 'fr' ||
+        targetLanguage != 'pt-BR' ||
+        !hostCompatible ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hostLocresSha256)) {
+      throw const FormatException(
+        'Metadados de cultura da tradução não são suportados.',
+      );
     }
   }
 }
