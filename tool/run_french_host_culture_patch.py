@@ -58,3 +58,25 @@ source = source[:start] + corrected + source[end:]
 namespace = {"__name__": "launcher_patch", "__file__": str(patcher)}
 exec(compile(source, str(patcher), "exec"), namespace)
 namespace["main"]()
+
+manifest_test = ROOT / "test" / "translation_manifest_test.dart"
+manifest_source = manifest_test.read_text(encoding="utf-8")
+manifest_source = manifest_source.replace("manifestJson()", "_hostManifestJson()")
+manifest_source += r'''
+
+Map<String, dynamic> _hostManifestJson() => {
+  'schemaVersion': 1,
+  'translationVersion': '1.0.0',
+  'publishedAt': '2026-07-27T00:00:00Z',
+  'files': [
+    {
+      'name': 'translation.pak',
+      'relativeDestination': 'Client/Content/Paks/translation.pak',
+      'url': 'https://example.com/translation.pak',
+      'size': 42,
+      'sha256': validHash,
+    },
+  ],
+};
+'''
+manifest_test.write_text(manifest_source, encoding="utf-8")
