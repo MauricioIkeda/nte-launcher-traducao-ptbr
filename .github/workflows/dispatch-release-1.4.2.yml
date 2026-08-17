@@ -1,0 +1,25 @@
+name: Dispatch launcher 1.4.2 release
+
+on:
+  push:
+    branches:
+      - "release-dispatch/1.4.2"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release-launcher.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f version="1.4.2" \
+            -f release_notes="Hotfix crítico: suporte à configuração de idioma da Epic Games, garantindo launcher oficial em inglês e jogo no slot francês/PT-BR." \
+            -f mandatory="true"
