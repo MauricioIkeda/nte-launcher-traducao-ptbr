@@ -4,6 +4,13 @@
   "publishedAt": "2026-08-17T06:19:58Z",
   "gameBuildId": "official:res=1.2.16;launcher=1.0.8.0727;build=0402a298",
   "sourceHash": "f50f898536ff6e63a9154a5c2a46bac8dcbeb1574e092b2b53ef142a682dc21f",
+  "localization": {
+    "sourceCulture": "en",
+    "installationCulture": "fr",
+    "targetLanguage": "pt-BR",
+    "hostCompatible": true,
+    "hostLocresSha256": "ef8f7478c3a567d24221cc151669286a03412b468e45b7611ce98f77b2669724"
+  },
   "files": [
     {
       "name": "UniversalSigBypasser.asi",
