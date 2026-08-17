@@ -148,6 +148,32 @@ void main() {
     }
   });
 
+  test('accepts French host-culture metadata', () {
+    final json = _hostManifestJson();
+    json['localization'] = {
+      'sourceCulture': 'en',
+      'installationCulture': 'fr',
+      'targetLanguage': 'pt-BR',
+      'hostCompatible': true,
+      'hostLocresSha256': 'e' * 64,
+    };
+    final manifest = TranslationManifest.fromJson(json);
+    expect(manifest.localization?.installationCulture, 'fr');
+    expect(manifest.localization?.targetLanguage, 'pt-BR');
+  });
+
+  test('rejects unsupported host-culture metadata', () {
+    final json = _hostManifestJson();
+    json['localization'] = {
+      'sourceCulture': 'en',
+      'installationCulture': 'de',
+      'targetLanguage': 'pt-BR',
+      'hostCompatible': true,
+      'hostLocresSha256': 'e' * 64,
+    };
+    expect(() => TranslationManifest.fromJson(json), throwsFormatException);
+  });
+
   test('rejects duplicate file names case-insensitively', () {
     expect(
       () => TranslationManifest.fromJson({
@@ -175,3 +201,18 @@ void main() {
     );
   });
 }
+
+Map<String, dynamic> _hostManifestJson() => {
+  'schemaVersion': 1,
+  'translationVersion': '1.0.0',
+  'publishedAt': '2026-07-27T00:00:00Z',
+  'files': [
+    {
+      'name': 'translation.pak',
+      'relativeDestination': 'Client/Content/Paks/translation.pak',
+      'url': 'https://example.com/translation.pak',
+      'size': 42,
+      'sha256': validHash,
+    },
+  ],
+};

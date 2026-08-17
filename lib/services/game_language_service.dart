@@ -159,7 +159,9 @@ class GameLanguageService {
     }
     final parsed = await _readIni(file);
     final matches = parsed.settings
-        .where((setting) => _normalizeKey(setting.key) == _normalizeKey(receipt.key))
+        .where(
+          (setting) => _normalizeKey(setting.key) == _normalizeKey(receipt.key),
+        )
         .toList(growable: false);
     if (matches.length != 1) {
       return const LanguageRestoreResult(
@@ -171,12 +173,17 @@ class GameLanguageService {
     if (current.value.toLowerCase() != receipt.requestedCulture.toLowerCase()) {
       return const LanguageRestoreResult(
         restored: false,
-        reason: 'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
+        reason:
+            'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
         preservedUserChoice: true,
       );
     }
 
-    await _replaceSetting(current, receipt.previousRawValue, rawReplacement: true);
+    await _replaceSetting(
+      current,
+      receipt.previousRawValue,
+      rawReplacement: true,
+    );
     return const LanguageRestoreResult(restored: true);
   }
 
@@ -193,7 +200,8 @@ class GameLanguageService {
         if (_voiceTerms.any(combined.contains)) {
           continue;
         }
-        final safe = _safeKeys.contains(normalized) ||
+        final safe =
+            _safeKeys.contains(normalized) ||
             (setting.section.toLowerCase().contains('internationalization') &&
                 const {'culture', 'language', 'locale'}.contains(normalized));
         if (!safe || !_knownValues.contains(setting.value.toLowerCase())) {
@@ -238,8 +246,8 @@ class GameLanguageService {
       'locale': 5,
       'currentlocale': 5,
     };
-    final fileOrder = p.basename(setting.file.path).toLowerCase() ==
-            'gameusersettings.ini'
+    final fileOrder =
+        p.basename(setting.file.path).toLowerCase() == 'gameusersettings.ini'
         ? 0
         : 1;
     return (keyOrder[key] ?? 99) * 10 + fileOrder;
@@ -257,7 +265,10 @@ class GameLanguageService {
       p.join(base, 'Saved', 'Config', 'WindowsClient'),
     ];
     const names = ['GameUserSettings.ini', 'Game.ini', 'UserSettings.ini'];
-    return [for (final root in roots) for (final name in names) File(p.join(root, name))];
+    return [
+      for (final root in roots)
+        for (final name in names) File(p.join(root, name)),
+    ];
   }
 
   bool _isAllowedConfigPath(String value) {
@@ -271,16 +282,21 @@ class GameLanguageService {
       p.join(local, 'HT', 'Saved', 'Config', 'Windows'),
       p.join(local, 'HT', 'Saved', 'Config', 'WindowsClient'),
     ].map((root) => p.normalize(p.absolute(root)));
-    if (!const {'gameusersettings.ini', 'game.ini', 'usersettings.ini'}.contains(
-      p.basename(candidate).toLowerCase(),
-    )) {
+    if (!const {
+      'gameusersettings.ini',
+      'game.ini',
+      'usersettings.ini',
+    }.contains(p.basename(candidate).toLowerCase())) {
       return false;
     }
     return roots.any((root) => p.isWithin(root, candidate));
   }
 
   bool _sameSetting(_DetectedSetting current, TextLanguageReceipt previous) =>
-      p.equals(p.normalize(current.file.path), p.normalize(previous.configPath)) &&
+      p.equals(
+        p.normalize(current.file.path),
+        p.normalize(previous.configPath),
+      ) &&
       _normalizeKey(current.key) == _normalizeKey(previous.key);
 
   Future<_ParsedIni> _readIni(File file) async {
@@ -360,12 +376,16 @@ class GameLanguageService {
   }) async {
     final current = await _readIni(setting.file);
     final candidates = current.settings
-        .where((item) =>
-            _normalizeKey(item.key) == _normalizeKey(setting.key) &&
-            item.lineIndex == setting.lineIndex)
+        .where(
+          (item) =>
+              _normalizeKey(item.key) == _normalizeKey(setting.key) &&
+              item.lineIndex == setting.lineIndex,
+        )
         .toList(growable: false);
     if (candidates.length != 1) {
-      throw const FormatException('A configuração de idioma mudou durante a operação.');
+      throw const FormatException(
+        'A configuração de idioma mudou durante a operação.',
+      );
     }
     final validated = candidates.single;
     final line = _withoutLineEnding(current.lines[validated.lineIndex]);
@@ -378,7 +398,9 @@ class GameLanguageService {
     var output = replacement;
     if (!rawReplacement) {
       final raw = match.group(4)!.trim();
-      final quote = raw.length >= 2 && raw[0] == raw[raw.length - 1] &&
+      final quote =
+          raw.length >= 2 &&
+              raw[0] == raw[raw.length - 1] &&
               (raw[0] == '"' || raw[0] == "'")
           ? raw[0]
           : '';
@@ -454,12 +476,12 @@ class _ParsedIni {
   final List<_DetectedSetting> settings;
 
   _ParsedIni withSettings(List<_DetectedSetting> value) => _ParsedIni(
-        text: text,
-        encoding: encoding,
-        bom: bom,
-        lines: lines,
-        settings: value,
-      );
+    text: text,
+    encoding: encoding,
+    bom: bom,
+    lines: lines,
+    settings: value,
+  );
 }
 
 class _DetectedSetting {
@@ -482,12 +504,12 @@ class _DetectedSetting {
   final String value;
 
   _DetectedSetting withParsed(_ParsedIni value) => _DetectedSetting(
-        file: file,
-        parsed: value,
-        lineIndex: lineIndex,
-        section: section,
-        key: key,
-        rawValue: rawValue,
-        value: this.value,
-      );
+    file: file,
+    parsed: value,
+    lineIndex: lineIndex,
+    section: section,
+    key: key,
+    rawValue: rawValue,
+    value: this.value,
+  );
 }
