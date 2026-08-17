@@ -5,6 +5,7 @@ import '../models/install_receipt.dart';
 import '../models/loaded_translation_manifest.dart';
 import '../models/translation_installation.dart';
 import 'file_integrity_service.dart';
+import 'game_language_service.dart';
 import 'receipt_repository.dart';
 import 'safe_path_service.dart';
 
@@ -17,12 +18,14 @@ class TranslationVerificationService {
     required this.receipts,
     required this.safePaths,
     required this.log,
-  });
+    GameLanguageService? gameLanguage,
+  }) : gameLanguage = gameLanguage ?? GameLanguageService();
 
   final FileIntegrityService integrity;
   final ReceiptRepository receipts;
   final SafePathService safePaths;
   final LauncherLog log;
+  final GameLanguageService gameLanguage;
 
   Future<TranslationVerificationResult> verify({
     required LoadedTranslationManifest loadedManifest,
@@ -58,6 +61,29 @@ class TranslationVerificationService {
               'Existe um recibo temporário abandonado.',
             ),
       );
+    }
+
+    final languageReceipt = receiptResult.receipt?.textLanguage;
+    if (manifest.localization?.installationCulture == 'fr' &&
+        languageReceipt?.requestedCulture == 'fr') {
+      try {
+        final prepared = await gameLanguage.ensureCulture(
+          'fr',
+          previous: languageReceipt,
+        );
+        if (prepared.changed) {
+          await log.info(
+            'Cultura preparada: launcher oficial em inglês e jogo no slot '
+            'francês/PT-BR.',
+          );
+        }
+      } catch (error, stackTrace) {
+        await log.error(
+          'Não foi possível preparar automaticamente a cultura do NTE.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
     }
 
     try {
