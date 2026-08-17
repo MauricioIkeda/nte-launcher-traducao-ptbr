@@ -37,7 +37,8 @@ class GameLanguageService {
 
   final String? _localAppData;
 
-  static const _nteEncryptedKey = 'NteEncryptedCulture';
+  static const _nteEncryptedKey = 'NteEncryptedCulture'; // legacy
+  static const _nteHybridKey = 'NteHybridCulture';
 
   static const _knownValues = <String>{
     'en',
@@ -91,9 +92,9 @@ class GameLanguageService {
   static const _voiceTerms = <String>['voice', 'audio', 'dub', 'speech'];
 
   // NTE serializes each GameUserSettings.ini line independently using
-  // AES-256-ECB + PKCS7 + Base64. The launcher deliberately recognizes only
-  // deterministic Language/Locale ciphertexts, so unrelated encrypted settings
-  // (including account data and AudioCulture) remain byte-for-byte untouched.
+  // AES-256-ECB + PKCS7 + Base64. We deliberately recognize only deterministic
+  // Language/Locale ciphertexts. AudioCulture and every unrelated encrypted
+  // setting stay byte-for-byte untouched.
   static const _encryptedLanguageLines = <String, String>{
     'en': 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=',
     'en-us': '/3xqiRrC9gSVSzzgk9s+n4Ay2jEgNpY5BibX5hbRjA4=',
@@ -156,11 +157,192 @@ class GameLanguageService {
     if (culture != 'fr') {
       return const LanguageSwitchResult(
         changed: false,
-        reason: 'O launcher só permite troca automática para o slot fr.',
+        reason: 'O launcher só permite o host de texto no slot fr.',
       );
     }
 
-    final detected = await _detect();
+    final encrypted = await _detectSingleEncryptedState();
+    if (encrypted != null) {
+      final receipt = _hybridReceipt(encrypted, culture, previous);
+      final changed =
+          encrypted.globalLanguage.toLowerCase() != 'en' ||
+          encrypted.globalLocale.toLowerCase() != 'en' ||
+          encrypted.gameLanguage.toLowerCase() != culture;
+      if (changed) {
+        await _writeEncryptedState(
+          encrypted,
+          globalLanguage: 'en',
+          globalLocale: 'en',
+          gameLanguage: culture,
+        );
+      }
+      return LanguageSwitchResult(changed: changed, receipt: receipt);
+    }
+
+    return _ensurePlainCulture(culture, previous: previous);
+  }
+
+  Future<LanguageRestoreResult> restore(TextLanguageReceipt? receipt) async {
+    if (receipt == null) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason: 'Nenhuma alteração automática de idioma foi registrada.',
+      );
+    }
+    if (!_isAllowedConfigPath(receipt.configPath)) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason: 'O caminho salvo da configuração não é permitido.',
+      );
+    }
+
+    final file = File(receipt.configPath);
+    if (!await file.exists()) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason: 'O arquivo de configuração não existe mais.',
+      );
+    }
+
+    final normalizedKey = _normalizeKey(receipt.key);
+    if (normalizedKey == _normalizeKey(_nteHybridKey)) {
+      return _restoreHybrid(file, receipt);
+    }
+    if (normalizedKey == _normalizeKey(_nteEncryptedKey)) {
+      return _restoreLegacyEncrypted(file, receipt);
+    }
+    return _restorePlain(file, receipt);
+  }
+
+  TextLanguageReceipt _hybridReceipt(
+    _EncryptedState current,
+    String culture,
+    TextLanguageReceipt? previous,
+  ) {
+    if (previous != null &&
+        p.equals(
+          p.normalize(previous.configPath),
+          p.normalize(current.file.path),
+        )) {
+      final key = _normalizeKey(previous.key);
+      if (key == _normalizeKey(_nteHybridKey)) {
+        return previous;
+      }
+      if (key == _normalizeKey(_nteEncryptedKey)) {
+        final baseline = previous.previousValue.toLowerCase();
+        if (_encryptedLanguageLines.containsKey(baseline) &&
+            _encryptedLocaleLines.containsKey(baseline)) {
+          return TextLanguageReceipt(
+            configPath: current.file.path,
+            key: _nteHybridKey,
+            previousRawValue: jsonEncode({
+              'globalLanguage': baseline,
+              'globalLocale': baseline,
+              'gameLanguage': baseline,
+            }),
+            previousValue: baseline,
+            requestedCulture: culture,
+          );
+        }
+      }
+    }
+
+    return TextLanguageReceipt(
+      configPath: current.file.path,
+      key: _nteHybridKey,
+      previousRawValue: jsonEncode({
+        'globalLanguage': current.globalLanguage,
+        'globalLocale': current.globalLocale,
+        'gameLanguage': current.gameLanguage,
+      }),
+      previousValue: current.gameLanguage,
+      requestedCulture: culture,
+    );
+  }
+
+  Future<LanguageRestoreResult> _restoreHybrid(
+    File file,
+    TextLanguageReceipt receipt,
+  ) async {
+    final current = await _detectEncryptedState(file);
+    final baseline = _parseHybridBaseline(receipt.previousRawValue);
+    if (current == null || baseline == null) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason: 'O estado híbrido criptografado do NTE não pôde ser revalidado.',
+      );
+    }
+
+    final requested = receipt.requestedCulture.toLowerCase();
+    final currentTriplet = (
+      current.globalLanguage.toLowerCase(),
+      current.globalLocale.toLowerCase(),
+      current.gameLanguage.toLowerCase(),
+    );
+    final expectedHybrid = ('en', 'en', requested);
+    final expectedAfterGame = (requested, requested, requested);
+    if (currentTriplet != expectedHybrid && currentTriplet != expectedAfterGame) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason:
+            'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
+        preservedUserChoice: true,
+      );
+    }
+
+    await _writeEncryptedState(
+      current,
+      globalLanguage: baseline.globalLanguage,
+      globalLocale: baseline.globalLocale,
+      gameLanguage: baseline.gameLanguage,
+    );
+    return const LanguageRestoreResult(restored: true);
+  }
+
+  Future<LanguageRestoreResult> _restoreLegacyEncrypted(
+    File file,
+    TextLanguageReceipt receipt,
+  ) async {
+    final current = await _detectEncryptedState(file);
+    if (current == null) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason: 'O idioma criptografado do NTE não pôde ser revalidado.',
+      );
+    }
+    final requested = receipt.requestedCulture.toLowerCase();
+    if (current.globalLanguage.toLowerCase() != requested ||
+        current.globalLocale.toLowerCase() != requested ||
+        current.gameLanguage.toLowerCase() != requested) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason:
+            'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
+        preservedUserChoice: true,
+      );
+    }
+    final previous = receipt.previousValue.toLowerCase();
+    if (!_encryptedLanguageLines.containsKey(previous) ||
+        !_encryptedLocaleLines.containsKey(previous)) {
+      return const LanguageRestoreResult(
+        restored: false,
+        reason: 'A cultura anterior não é suportada para restauração.',
+      );
+    }
+    await _writeEncryptedState(
+      current,
+      globalLanguage: previous,
+      globalLocale: previous,
+      gameLanguage: previous,
+    );
+    return const LanguageRestoreResult(restored: true);
+  }
+
+  Future<LanguageSwitchResult> _ensurePlainCulture(
+    String culture, {
+    TextLanguageReceipt? previous,
+  }) async {
+    final detected = await _detectPlain();
     if (previous != null) {
       if (detected == null) {
         return LanguageSwitchResult(changed: false, receipt: previous);
@@ -204,61 +386,14 @@ class GameLanguageService {
       previousValue: detected.value,
       requestedCulture: culture,
     );
-    await _replaceSetting(detected, culture);
+    await _replacePlainSetting(detected, culture);
     return LanguageSwitchResult(changed: true, receipt: receipt);
   }
 
-  Future<LanguageRestoreResult> restore(TextLanguageReceipt? receipt) async {
-    if (receipt == null) {
-      return const LanguageRestoreResult(
-        restored: false,
-        reason: 'Nenhuma alteração automática de idioma foi registrada.',
-      );
-    }
-    if (!_isAllowedConfigPath(receipt.configPath)) {
-      return const LanguageRestoreResult(
-        restored: false,
-        reason: 'O caminho salvo da configuração não é permitido.',
-      );
-    }
-
-    final file = File(receipt.configPath);
-    if (!await file.exists()) {
-      return const LanguageRestoreResult(
-        restored: false,
-        reason: 'O arquivo de configuração não existe mais.',
-      );
-    }
-
-    if (_normalizeKey(receipt.key) == _normalizeKey(_nteEncryptedKey)) {
-      final current = await _detectEncryptedCulture(file);
-      if (current == null) {
-        return const LanguageRestoreResult(
-          restored: false,
-          reason: 'O idioma criptografado do NTE não pôde ser revalidado.',
-        );
-      }
-      if (current.culture.toLowerCase() !=
-          receipt.requestedCulture.toLowerCase()) {
-        return const LanguageRestoreResult(
-          restored: false,
-          reason:
-              'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
-          preservedUserChoice: true,
-        );
-      }
-      final previous = receipt.previousValue.toLowerCase();
-      if (!_encryptedLanguageLines.containsKey(previous) ||
-          !_encryptedLocaleLines.containsKey(previous)) {
-        return const LanguageRestoreResult(
-          restored: false,
-          reason: 'A cultura anterior não é suportada para restauração.',
-        );
-      }
-      await _replaceEncryptedCulture(file, previous);
-      return const LanguageRestoreResult(restored: true);
-    }
-
+  Future<LanguageRestoreResult> _restorePlain(
+    File file,
+    TextLanguageReceipt receipt,
+  ) async {
     final parsed = await _readIni(file);
     final matches = parsed.settings
         .where(
@@ -280,8 +415,7 @@ class GameLanguageService {
         preservedUserChoice: true,
       );
     }
-
-    await _replaceSetting(
+    await _replacePlainSetting(
       current,
       receipt.previousRawValue,
       rawReplacement: true,
@@ -289,43 +423,129 @@ class GameLanguageService {
     return const LanguageRestoreResult(restored: true);
   }
 
-  Future<_DetectedSetting?> _detect() async {
-    final encrypted = <_DetectedSetting>[];
+  Future<_EncryptedState?> _detectSingleEncryptedState() async {
+    final found = <_EncryptedState>[];
     for (final file in _candidateFiles()) {
       if (!await file.exists() ||
           p.basename(file.path).toLowerCase() != 'gameusersettings.ini') {
         continue;
       }
-      final found = await _detectEncryptedCulture(file);
-      if (found == null) {
-        continue;
+      final state = await _detectEncryptedState(file);
+      if (state != null) {
+        found.add(state);
       }
-      encrypted.add(
-        _DetectedSetting(
-          file: file,
-          parsed: const _ParsedIni(
-            text: '',
-            encoding: _IniEncoding.utf8,
-            bom: [],
-            lines: [],
-            settings: [],
-          ),
-          lineIndex: -1,
-          section: 'Internationalization',
-          key: _nteEncryptedKey,
-          rawValue: found.culture,
-          value: found.culture,
-          encrypted: true,
-        ),
-      );
     }
-    if (encrypted.length == 1) {
-      return encrypted.single;
-    }
-    if (encrypted.length > 1) {
+    return found.length == 1 ? found.single : null;
+  }
+
+  Future<_EncryptedState?> _detectEncryptedState(File file) async {
+    final parsed = await _readUtf8Payload(file);
+    if (parsed == null) {
       return null;
     }
+    final lines = _splitLines(parsed.text);
+    final languages = <(int, String)>[];
+    final locales = <(int, String)>[];
+    for (var index = 0; index < lines.length; index++) {
+      final token = _withoutLineEnding(lines[index]).trim();
+      final language = _encryptedLanguageLookup[token];
+      if (language != null) {
+        languages.add((index, language));
+      }
+      final locale = _encryptedLocaleLookup[token];
+      if (locale != null) {
+        locales.add((index, locale));
+      }
+    }
 
+    // Real NTE layout: [Internationalization] Language, Locale, then later
+    // [/Script/HTGame.HTGameUserSettings] Language.
+    if (languages.length != 2 || locales.length != 1) {
+      return null;
+    }
+    if (!(languages[0].$1 < locales[0].$1 &&
+        locales[0].$1 < languages[1].$1)) {
+      return null;
+    }
+    return _EncryptedState(
+      file: file,
+      parsed: parsed,
+      lines: lines,
+      globalLanguageIndex: languages[0].$1,
+      globalLocaleIndex: locales[0].$1,
+      gameLanguageIndex: languages[1].$1,
+      globalLanguage: languages[0].$2,
+      globalLocale: locales[0].$2,
+      gameLanguage: languages[1].$2,
+    );
+  }
+
+  Future<void> _writeEncryptedState(
+    _EncryptedState state, {
+    required String globalLanguage,
+    required String globalLocale,
+    required String gameLanguage,
+  }) async {
+    final globalLanguageToken =
+        _encryptedLanguageLines[globalLanguage.toLowerCase()];
+    final globalLocaleToken = _encryptedLocaleLines[globalLocale.toLowerCase()];
+    final gameLanguageToken =
+        _encryptedLanguageLines[gameLanguage.toLowerCase()];
+    if (globalLanguageToken == null ||
+        globalLocaleToken == null ||
+        gameLanguageToken == null) {
+      throw const FormatException(
+        'Uma das culturas solicitadas não é suportada pelo GameUserSettings criptografado.',
+      );
+    }
+
+    final current = await _detectEncryptedState(state.file);
+    if (current == null) {
+      throw const FormatException(
+        'Layout criptografado do GameUserSettings mudou durante a operação.',
+      );
+    }
+    final lines = List<String>.from(current.lines);
+    void replace(int index, String token) {
+      final body = _withoutLineEnding(lines[index]);
+      final ending = lines[index].substring(body.length);
+      lines[index] = '$token$ending';
+    }
+
+    replace(current.globalLanguageIndex, globalLanguageToken);
+    replace(current.globalLocaleIndex, globalLocaleToken);
+    replace(current.gameLanguageIndex, gameLanguageToken);
+    await _writeAtomic(
+      current.file,
+      current.parsed.bom,
+      utf8.encode(lines.join()),
+    );
+  }
+
+  _HybridBaseline? _parseHybridBaseline(String raw) {
+    try {
+      final value = jsonDecode(raw);
+      if (value is! Map<String, dynamic>) {
+        return null;
+      }
+      final globalLanguage =
+          value['globalLanguage']?.toString().toLowerCase() ?? '';
+      final globalLocale =
+          value['globalLocale']?.toString().toLowerCase() ?? '';
+      final gameLanguage =
+          value['gameLanguage']?.toString().toLowerCase() ?? '';
+      if (!_encryptedLanguageLines.containsKey(globalLanguage) ||
+          !_encryptedLocaleLines.containsKey(globalLocale) ||
+          !_encryptedLanguageLines.containsKey(gameLanguage)) {
+        return null;
+      }
+      return _HybridBaseline(globalLanguage, globalLocale, gameLanguage);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<_DetectedSetting?> _detectPlain() async {
     final candidates = <_DetectedSetting>[];
     for (final file in _candidateFiles()) {
       if (!await file.exists()) {
@@ -360,10 +580,7 @@ class GameLanguageService {
     });
     final bestScore = _score(candidates.first);
     final best = candidates.where((item) => _score(item) == bestScore).toList();
-    if (best.length != 1) {
-      return null;
-    }
-    return best.single;
+    return best.length == 1 ? best.single : null;
   }
 
   int _score(_DetectedSetting setting) {
@@ -438,70 +655,6 @@ class GameLanguageService {
         p.normalize(previous.configPath),
       ) &&
       _normalizeKey(current.key) == _normalizeKey(previous.key);
-
-  Future<_EncryptedCulture?> _detectEncryptedCulture(File file) async {
-    final parsed = await _readUtf8Payload(file);
-    if (parsed == null) {
-      return null;
-    }
-    final cultures = <String>{};
-    var languageCount = 0;
-    var localeCount = 0;
-    for (final line in _splitLines(parsed.text)) {
-      final token = _withoutLineEnding(line).trim();
-      final language = _encryptedLanguageLookup[token];
-      if (language != null) {
-        cultures.add(language);
-        languageCount++;
-      }
-      final locale = _encryptedLocaleLookup[token];
-      if (locale != null) {
-        cultures.add(locale);
-        localeCount++;
-      }
-    }
-    if (languageCount == 0 || localeCount == 0 || cultures.length != 1) {
-      return null;
-    }
-    return _EncryptedCulture(cultures.single);
-  }
-
-  Future<void> _replaceEncryptedCulture(File file, String culture) async {
-    final language = _encryptedLanguageLines[culture.toLowerCase()];
-    final locale = _encryptedLocaleLines[culture.toLowerCase()];
-    if (language == null || locale == null) {
-      throw const FormatException(
-        'Cultura não suportada pelo GameUserSettings criptografado.',
-      );
-    }
-
-    final parsed = await _readUtf8Payload(file);
-    if (parsed == null) {
-      throw const FormatException(
-        'GameUserSettings criptografado não está em UTF-8.',
-      );
-    }
-    final lines = _splitLines(parsed.text);
-    var replacements = 0;
-    for (var index = 0; index < lines.length; index++) {
-      final body = _withoutLineEnding(lines[index]);
-      final ending = lines[index].substring(body.length);
-      final token = body.trim();
-      if (_encryptedLanguageLookup.containsKey(token)) {
-        lines[index] = '$language$ending';
-        replacements++;
-      } else if (_encryptedLocaleLookup.containsKey(token)) {
-        lines[index] = '$locale$ending';
-        replacements++;
-      }
-    }
-    if (replacements == 0) {
-      throw const FormatException(
-        'Nenhuma linha Language/Locale criptografada reconhecida foi encontrada.',
-      );
-    }
-    await _writeAtomic(file, parsed.bom, utf8.encode(lines.join()));
-  }
 
   Future<_Utf8Payload?> _readUtf8Payload(File file) async {
     final bytes = await file.readAsBytes();
@@ -595,16 +748,11 @@ class GameLanguageService {
     ]);
   }
 
-  Future<void> _replaceSetting(
+  Future<void> _replacePlainSetting(
     _DetectedSetting setting,
     String replacement, {
     bool rawReplacement = false,
   }) async {
-    if (setting.encrypted) {
-      await _replaceEncryptedCulture(setting.file, replacement);
-      return;
-    }
-
     final current = await _readIni(setting.file);
     final candidates = current.settings
         .where(
@@ -709,10 +857,40 @@ class _Utf8Payload {
   final List<int> bom;
 }
 
-class _EncryptedCulture {
-  const _EncryptedCulture(this.culture);
+class _EncryptedState {
+  const _EncryptedState({
+    required this.file,
+    required this.parsed,
+    required this.lines,
+    required this.globalLanguageIndex,
+    required this.globalLocaleIndex,
+    required this.gameLanguageIndex,
+    required this.globalLanguage,
+    required this.globalLocale,
+    required this.gameLanguage,
+  });
 
-  final String culture;
+  final File file;
+  final _Utf8Payload parsed;
+  final List<String> lines;
+  final int globalLanguageIndex;
+  final int globalLocaleIndex;
+  final int gameLanguageIndex;
+  final String globalLanguage;
+  final String globalLocale;
+  final String gameLanguage;
+}
+
+class _HybridBaseline {
+  const _HybridBaseline(
+    this.globalLanguage,
+    this.globalLocale,
+    this.gameLanguage,
+  );
+
+  final String globalLanguage;
+  final String globalLocale;
+  final String gameLanguage;
 }
 
 class _ParsedIni {
@@ -748,7 +926,6 @@ class _DetectedSetting {
     required this.key,
     required this.rawValue,
     required this.value,
-    this.encrypted = false,
   });
 
   final File file;
@@ -758,7 +935,6 @@ class _DetectedSetting {
   final String key;
   final String rawValue;
   final String value;
-  final bool encrypted;
 
   _DetectedSetting withParsed(_ParsedIni value) => _DetectedSetting(
     file: file,
@@ -768,6 +944,5 @@ class _DetectedSetting {
     key: key,
     rawValue: rawValue,
     value: this.value,
-    encrypted: encrypted,
   );
 }
