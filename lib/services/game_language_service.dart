@@ -37,17 +37,30 @@ class GameLanguageService {
 
   final String? _localAppData;
 
+  static const _nteEncryptedKey = 'NteEncryptedCulture';
+
   static const _knownValues = <String>{
     'en',
+    'en-us',
+    'en-gb',
     'fr',
+    'fr-fr',
     'de',
+    'de-de',
     'es',
+    'es-es',
     'ru',
+    'ru-ru',
     'ja',
+    'ja-jp',
     'ko',
+    'ko-kr',
     'zh-cn',
+    'zh-hans',
     'zh-hant',
     'zh-tw',
+    'th',
+    'th-th',
     'english',
     'french',
     'german',
@@ -76,6 +89,65 @@ class GameLanguageService {
   };
 
   static const _voiceTerms = <String>['voice', 'audio', 'dub', 'speech'];
+
+  // NTE serializes each GameUserSettings.ini line independently using
+  // AES-256-ECB + PKCS7 + Base64. The launcher deliberately recognizes only
+  // deterministic Language/Locale ciphertexts, so unrelated encrypted settings
+  // (including account data and AudioCulture) remain byte-for-byte untouched.
+  static const _encryptedLanguageLines = <String, String>{
+    'en': 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=',
+    'en-us': '/3xqiRrC9gSVSzzgk9s+n4Ay2jEgNpY5BibX5hbRjA4=',
+    'en-gb': 'Wnsy+vibeymVdcnxBPcIcYAy2jEgNpY5BibX5hbRjA4=',
+    'fr': 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=',
+    'fr-fr': 'yM4HMC+PisXzFlO02IFU6IAy2jEgNpY5BibX5hbRjA4=',
+    'de': 'kInAsIbW2RO39jtDoqxgRWymGOWDheFjSanKLCRlfZ4=',
+    'de-de': 'o6s0CjJEKw4NruSwyGjP34Ay2jEgNpY5BibX5hbRjA4=',
+    'es': 'nDVC6GjSxzk1HCELSNSNV2ymGOWDheFjSanKLCRlfZ4=',
+    'es-es': 'GQBPvWNBp5ej9L4FpzLOtoAy2jEgNpY5BibX5hbRjA4=',
+    'ru': 'GZeeimE9/EmQGWU5/eqB62ymGOWDheFjSanKLCRlfZ4=',
+    'ru-ru': '9AupYWE2FKnFmbEBiOJVboAy2jEgNpY5BibX5hbRjA4=',
+    'ja': 'FrRu/t7fsNwUvrMHA6lpUGymGOWDheFjSanKLCRlfZ4=',
+    'ja-jp': 'v0/zImR7UgWAhYBy0bw2s4Ay2jEgNpY5BibX5hbRjA4=',
+    'ko': 'ldZcTw0NKtqYUmr7GQ2ltmymGOWDheFjSanKLCRlfZ4=',
+    'ko-kr': '2fzBE7VBcOP6lDHMa5HpZYAy2jEgNpY5BibX5hbRjA4=',
+    'zh-cn': 'H+LS8ZaBI3EFCBAz2OhZdYAy2jEgNpY5BibX5hbRjA4=',
+    'zh-hans': 'B+IsDNZQeF7VjuAXj9+GXsnVOUEe9Mh6izI/8SyK1z8=',
+    'zh-hant': '+jBfHDlY9MUpA9QfKNqwpsnVOUEe9Mh6izI/8SyK1z8=',
+    'zh-tw': 'K1PAMfH81lzWgVmLxiMddoAy2jEgNpY5BibX5hbRjA4=',
+    'th': 'Mr/FGRfaUUxjE5mHBiBSumymGOWDheFjSanKLCRlfZ4=',
+    'th-th': 'scPl6Bopz8d7oCI3sStOfoAy2jEgNpY5BibX5hbRjA4=',
+  };
+
+  static const _encryptedLocaleLines = <String, String>{
+    'en': 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=',
+    'en-us': 'X4NgZX5cv+MBEOqLsJ/zmCc7J11Vc2iciV0GHNrqZX0=',
+    'en-gb': 'AaSNAnZrxYCl5HdPaUwRYSc7J11Vc2iciV0GHNrqZX0=',
+    'fr': 'NeXLYGL6ZN14QCC1BFkXxgl+l+fR2Cyd408uYnmPbXw=',
+    'fr-fr': 'fqp8w3C9R1LFT1Lz0vfPIyc7J11Vc2iciV0GHNrqZX0=',
+    'de': 'kAx51uJGW9PhnQsypySd8gl+l+fR2Cyd408uYnmPbXw=',
+    'de-de': '0oo3XcNTtPVxum+FCYchfSc7J11Vc2iciV0GHNrqZX0=',
+    'es': 'U7ww0XObGiKxLTqDkHKbSQl+l+fR2Cyd408uYnmPbXw=',
+    'es-es': 'Y/dXMjA4fB7tAyrjtguJKic7J11Vc2iciV0GHNrqZX0=',
+    'ru': 'kJTNBpBHvFxsO9IJk5+E6Ql+l+fR2Cyd408uYnmPbXw=',
+    'ru-ru': 'TVcG18meJR+2TXOcI1d9Yic7J11Vc2iciV0GHNrqZX0=',
+    'ja': 'qe+3AT0Tj/K5P1A5tvJjwQl+l+fR2Cyd408uYnmPbXw=',
+    'ja-jp': '7WVfleWuhmHIfd0lOG5Nxyc7J11Vc2iciV0GHNrqZX0=',
+    'ko': 'ma+Rq+fFnNQZV8IpWBWjBwl+l+fR2Cyd408uYnmPbXw=',
+    'ko-kr': '5xBkMQnSE0nBNaXd2Hp+sCc7J11Vc2iciV0GHNrqZX0=',
+    'zh-cn': 'pj/WJENp2s6VPPXU8bSTRSc7J11Vc2iciV0GHNrqZX0=',
+    'zh-hans': 'fJFprmlW9w3evcFFJSEFSIAy2jEgNpY5BibX5hbRjA4=',
+    'zh-hant': '+zghpGpk7iBaLrNdFwsZxYAy2jEgNpY5BibX5hbRjA4=',
+    'zh-tw': 'zi/BI3/n9FWVoLSYmk8KpSc7J11Vc2iciV0GHNrqZX0=',
+    'th': 'zgFNxwqwkGly7CWrNMvapwl+l+fR2Cyd408uYnmPbXw=',
+    'th-th': 'bg3m7zPMLUM9aJXBn1K3OSc7J11Vc2iciV0GHNrqZX0=',
+  };
+
+  static final _encryptedLanguageLookup = <String, String>{
+    for (final entry in _encryptedLanguageLines.entries) entry.value: entry.key,
+  };
+  static final _encryptedLocaleLookup = <String, String>{
+    for (final entry in _encryptedLocaleLines.entries) entry.value: entry.key,
+  };
 
   Future<LanguageSwitchResult> ensureCulture(
     String culture, {
@@ -157,6 +229,36 @@ class GameLanguageService {
         reason: 'O arquivo de configuração não existe mais.',
       );
     }
+
+    if (_normalizeKey(receipt.key) == _normalizeKey(_nteEncryptedKey)) {
+      final current = await _detectEncryptedCulture(file);
+      if (current == null) {
+        return const LanguageRestoreResult(
+          restored: false,
+          reason: 'O idioma criptografado do NTE não pôde ser revalidado.',
+        );
+      }
+      if (current.culture.toLowerCase() !=
+          receipt.requestedCulture.toLowerCase()) {
+        return const LanguageRestoreResult(
+          restored: false,
+          reason:
+              'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
+          preservedUserChoice: true,
+        );
+      }
+      final previous = receipt.previousValue.toLowerCase();
+      if (!_encryptedLanguageLines.containsKey(previous) ||
+          !_encryptedLocaleLines.containsKey(previous)) {
+        return const LanguageRestoreResult(
+          restored: false,
+          reason: 'A cultura anterior não é suportada para restauração.',
+        );
+      }
+      await _replaceEncryptedCulture(file, previous);
+      return const LanguageRestoreResult(restored: true);
+    }
+
     final parsed = await _readIni(file);
     final matches = parsed.settings
         .where(
@@ -188,6 +290,42 @@ class GameLanguageService {
   }
 
   Future<_DetectedSetting?> _detect() async {
+    final encrypted = <_DetectedSetting>[];
+    for (final file in _candidateFiles()) {
+      if (!await file.exists() ||
+          p.basename(file.path).toLowerCase() != 'gameusersettings.ini') {
+        continue;
+      }
+      final found = await _detectEncryptedCulture(file);
+      if (found == null) {
+        continue;
+      }
+      encrypted.add(
+        _DetectedSetting(
+          file: file,
+          parsed: const _ParsedIni(
+            text: '',
+            encoding: _IniEncoding.utf8,
+            bom: [],
+            lines: [],
+            settings: [],
+          ),
+          lineIndex: -1,
+          section: 'Internationalization',
+          key: _nteEncryptedKey,
+          rawValue: found.culture,
+          value: found.culture,
+          encrypted: true,
+        ),
+      );
+    }
+    if (encrypted.length == 1) {
+      return encrypted.single;
+    }
+    if (encrypted.length > 1) {
+      return null;
+    }
+
     final candidates = <_DetectedSetting>[];
     for (final file in _candidateFiles()) {
       if (!await file.exists()) {
@@ -261,6 +399,7 @@ class GameLanguageService {
     final base = p.join(local, 'HT');
     final roots = [
       p.join(base, 'Saved_Global', 'Config', 'Windows'),
+      p.join(base, 'Saved_GlobalSteam', 'Config', 'Windows'),
       p.join(base, 'Saved', 'Config', 'Windows'),
       p.join(base, 'Saved', 'Config', 'WindowsClient'),
     ];
@@ -279,6 +418,7 @@ class GameLanguageService {
     final candidate = p.normalize(p.absolute(value));
     final roots = [
       p.join(local, 'HT', 'Saved_Global', 'Config', 'Windows'),
+      p.join(local, 'HT', 'Saved_GlobalSteam', 'Config', 'Windows'),
       p.join(local, 'HT', 'Saved', 'Config', 'Windows'),
       p.join(local, 'HT', 'Saved', 'Config', 'WindowsClient'),
     ].map((root) => p.normalize(p.absolute(root)));
@@ -298,6 +438,92 @@ class GameLanguageService {
         p.normalize(previous.configPath),
       ) &&
       _normalizeKey(current.key) == _normalizeKey(previous.key);
+
+  Future<_EncryptedCulture?> _detectEncryptedCulture(File file) async {
+    final parsed = await _readUtf8Payload(file);
+    if (parsed == null) {
+      return null;
+    }
+    final cultures = <String>{};
+    var languageCount = 0;
+    var localeCount = 0;
+    for (final line in _splitLines(parsed.text)) {
+      final token = _withoutLineEnding(line).trim();
+      final language = _encryptedLanguageLookup[token];
+      if (language != null) {
+        cultures.add(language);
+        languageCount++;
+      }
+      final locale = _encryptedLocaleLookup[token];
+      if (locale != null) {
+        cultures.add(locale);
+        localeCount++;
+      }
+    }
+    if (languageCount == 0 || localeCount == 0 || cultures.length != 1) {
+      return null;
+    }
+    return _EncryptedCulture(cultures.single);
+  }
+
+  Future<void> _replaceEncryptedCulture(File file, String culture) async {
+    final language = _encryptedLanguageLines[culture.toLowerCase()];
+    final locale = _encryptedLocaleLines[culture.toLowerCase()];
+    if (language == null || locale == null) {
+      throw const FormatException(
+        'Cultura não suportada pelo GameUserSettings criptografado.',
+      );
+    }
+
+    final parsed = await _readUtf8Payload(file);
+    if (parsed == null) {
+      throw const FormatException(
+        'GameUserSettings criptografado não está em UTF-8.',
+      );
+    }
+    final lines = _splitLines(parsed.text);
+    var replacements = 0;
+    for (var index = 0; index < lines.length; index++) {
+      final body = _withoutLineEnding(lines[index]);
+      final ending = lines[index].substring(body.length);
+      final token = body.trim();
+      if (_encryptedLanguageLookup.containsKey(token)) {
+        lines[index] = '$language$ending';
+        replacements++;
+      } else if (_encryptedLocaleLookup.containsKey(token)) {
+        lines[index] = '$locale$ending';
+        replacements++;
+      }
+    }
+    if (replacements == 0) {
+      throw const FormatException(
+        'Nenhuma linha Language/Locale criptografada reconhecida foi encontrada.',
+      );
+    }
+    await _writeAtomic(file, parsed.bom, utf8.encode(lines.join()));
+  }
+
+  Future<_Utf8Payload?> _readUtf8Payload(File file) async {
+    final bytes = await file.readAsBytes();
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xef &&
+        bytes[1] == 0xbb &&
+        bytes[2] == 0xbf) {
+      try {
+        return _Utf8Payload(
+          utf8.decode(bytes.sublist(3)),
+          const [0xef, 0xbb, 0xbf],
+        );
+      } on FormatException {
+        return null;
+      }
+    }
+    try {
+      return _Utf8Payload(utf8.decode(bytes), const []);
+    } on FormatException {
+      return null;
+    }
+  }
 
   Future<_ParsedIni> _readIni(File file) async {
     final bytes = await file.readAsBytes();
@@ -374,6 +600,11 @@ class GameLanguageService {
     String replacement, {
     bool rawReplacement = false,
   }) async {
+    if (setting.encrypted) {
+      await _replaceEncryptedCulture(setting.file, replacement);
+      return;
+    }
+
     final current = await _readIni(setting.file);
     final candidates = current.settings
         .where(
@@ -412,12 +643,23 @@ class GameLanguageService {
     final payload = current.encoding == _IniEncoding.utf8
         ? utf8.encode(text)
         : latin1.encode(text);
-    final temporary = File('${setting.file.path}.nte-new');
-    await temporary.writeAsBytes([...current.bom, ...payload], flush: true);
-    if (await setting.file.exists()) {
-      await setting.file.delete();
+    await _writeAtomic(setting.file, current.bom, payload);
+  }
+
+  Future<void> _writeAtomic(
+    File file,
+    List<int> bom,
+    List<int> payload,
+  ) async {
+    final temporary = File('${file.path}.nte-new');
+    if (await temporary.exists()) {
+      await temporary.delete();
     }
-    await temporary.rename(setting.file.path);
+    await temporary.writeAsBytes([...bom, ...payload], flush: true);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    await temporary.rename(file.path);
   }
 
   static List<String> _splitLines(String text) {
@@ -460,6 +702,19 @@ class GameLanguageService {
 
 enum _IniEncoding { utf8, latin1 }
 
+class _Utf8Payload {
+  const _Utf8Payload(this.text, this.bom);
+
+  final String text;
+  final List<int> bom;
+}
+
+class _EncryptedCulture {
+  const _EncryptedCulture(this.culture);
+
+  final String culture;
+}
+
 class _ParsedIni {
   const _ParsedIni({
     required this.text,
@@ -493,6 +748,7 @@ class _DetectedSetting {
     required this.key,
     required this.rawValue,
     required this.value,
+    this.encrypted = false,
   });
 
   final File file;
@@ -502,6 +758,7 @@ class _DetectedSetting {
   final String key;
   final String rawValue;
   final String value;
+  final bool encrypted;
 
   _DetectedSetting withParsed(_ParsedIni value) => _DetectedSetting(
     file: file,
@@ -511,5 +768,6 @@ class _DetectedSetting {
     key: key,
     rawValue: rawValue,
     value: this.value,
+    encrypted: encrypted,
   );
 }
