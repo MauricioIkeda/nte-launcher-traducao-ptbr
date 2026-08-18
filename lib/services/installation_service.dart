@@ -9,6 +9,7 @@ import '../models/install_receipt.dart';
 import '../models/translation_manifest.dart';
 import 'file_integrity_service.dart';
 import 'game_language_service.dart';
+import 'native_container_guard.dart';
 import 'receipt_repository.dart';
 import 'safe_path_service.dart';
 
@@ -133,6 +134,21 @@ class InstallationService {
         );
       }
       final previousReceipt = receiptRead.receipt;
+      final containerCollisions = await NativeContainerGuard.findCollisions(
+        manifest: manifest,
+        gameDirectory: gameDirectory,
+        previousReceipt: previousReceipt,
+        safePaths: safePaths,
+        integrity: integrity,
+      );
+      if (containerCollisions.isNotEmpty) {
+        throw InstallationException(
+          'A instalação foi bloqueada para proteger containers que podem '
+          'pertencer ao NTE: ${containerCollisions.join(', ')}. '
+          'Não apague esses arquivos manualmente; remova a tradução ou gere '
+          'um diagnóstico antes de tentar novamente.',
+        );
+      }
       await storage.transactions.create(recursive: true);
       final transaction = Directory(
         p.join(
