@@ -1,0 +1,83 @@
+name: Publish Launcher 1.4.3 once
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: publish-launcher-1.4.3-once
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPECTED_SHA: 5359684ecb5a790b275977b8ef340cd01a80dce9
+      VERSION: 1.4.3
+      TAG: v1.4.3
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_NOTES: "Atualização de segurança: protege os containers nativos do NTE após atualizações do jogo e revalida ownership por tamanho e SHA-256 antes de sobrescrever arquivos."
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify exact release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_SHA"
+          grep -Fx "version: 1.4.3+23" pubspec.yaml
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to republish."
+            exit 1
+          fi
+
+      - name: Dispatch official launcher release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release-launcher.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f version="$VERSION" \
+            -f release_notes="$RELEASE_NOTES" \
+            -f mandatory=true
+
+      - name: Wait for official release workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow release-launcher.yml \
+              --branch main \
+              --event workflow_dispatch \
+              --limit 10 \
+              --json databaseId,headSha,status \
+              --jq 'map(select(.headSha == env.EXPECTED_SHA)) | .[0].databaseId // empty')"
+            if [ -n "$run_id" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"
+          echo "Official launcher release run: $run_id"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Verify release and update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          grep -Fx "NTE-Launcher-Traducao-PTBR-Setup.exe" <<<"$assets"
+          encoded="$(gh api "repos/$GITHUB_REPOSITORY/contents/assets/manifest/launcher_manifest.json?ref=main" --jq .content | tr -d '\n')"
+          decoded="$(printf '%s' "$encoded" | base64 -d)"
+          jq -e '.version == "1.4.3" and .mandatory == true' <<<"$decoded"
