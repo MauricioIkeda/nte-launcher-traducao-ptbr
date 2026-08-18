@@ -17,6 +17,10 @@ Esta branch não deve receber cherry-picks dos PRs criados em 18/08/2026. A impl
 9. Comparação de caminhos deve ser portável/case-insensitive no Windows e normalizar `\\`/`/`.
 10. O contrato de localização 1.4.2 (`en -> pt-BR` hospedado em `fr`), rollback, remoção e Play não devem ser alterados por esta reconstrução.
 
+## Arquitetura independente
+
+A reconstrução usa `NativeContainerGuard` como preflight de propriedade separado do serviço transacional. O guard apenas decide se é seguro começar uma instalação; ele não grava recibo, backup ou arquivo. Essa separação é deliberadamente diferente da implementação feita anteriormente na `main`, para permitir uma comparação semântica real entre duas soluções independentes.
+
 ## Casos mínimos de regressão
 
 - container nativo sem recibo: bloqueia e preserva bytes;
