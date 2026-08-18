@@ -64,6 +64,42 @@ void main() {
     expect((await receipts.read(game.path)).receipt, isNull);
   });
 
+  test('blocks a managed pak replaced later by a game update', () async {
+    const translated = [1, 2, 3];
+    const nativeAfterUpdate = [9, 9, 8, 8, 7, 7];
+    final manifest = _containerManifest(
+      'pakchunk999-Windows_999_P.pak',
+      translated,
+    );
+    final stage = await createStage(sandbox, manifest, const [translated]);
+
+    await service.install(manifest, stage, game.path);
+    final destination = File(
+      p.join(game.path, manifest.files.single.relativeDestination),
+    );
+    expect(await destination.readAsBytes(), translated);
+
+    // Simula a 1.3 escrevendo um container nativo no mesmo caminho que antes
+    // pertencia somente à tradução.
+    await destination.writeAsBytes(nativeAfterUpdate, flush: true);
+
+    await expectLater(
+      service.install(manifest, stage, game.path),
+      throwsA(
+        isA<InstallationException>().having(
+          (error) => error.message,
+          'message',
+          contains('proteger arquivos originais do jogo'),
+        ),
+      ),
+    );
+
+    expect(await destination.readAsBytes(), nativeAfterUpdate);
+    final receipt = (await receipts.read(game.path)).receipt;
+    expect(receipt, isNotNull);
+    expect(receipt!.files.single.originalExisted, isFalse);
+  });
+
   test('allows a new translation-owned pak container', () async {
     const translated = [1, 2, 3];
     final manifest = _containerManifest(
