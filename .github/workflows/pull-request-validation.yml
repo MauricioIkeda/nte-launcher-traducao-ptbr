@@ -2,7 +2,7 @@ name: Validate launcher pull request
 
 on:
   pull_request:
-    branches: [main]
+    branches: [audit/validation-pre13-20260818]
 
 permissions:
   contents: read
