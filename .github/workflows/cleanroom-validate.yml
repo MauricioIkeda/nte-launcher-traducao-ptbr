@@ -1,0 +1,78 @@
+name: Validate clean-room launcher reconstruction
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanroom-launcher-20260818
+  cancel-in-progress: false
+
+jobs:
+  python-contract:
+    name: Python and workflow contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out clean-room branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/cleanroom-pre13-20260818
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Compile and test workflow tools
+        run: |
+          python -m compileall tool
+          python -m unittest discover -s tool -p "test_*.py"
+      - name: Validate workflow YAML syntax
+        shell: bash
+        run: |
+          ruby -e '
+            require "yaml"
+            files = Dir[".github/workflows/*.{yml,yaml}"]
+            abort "No workflow YAML found" if files.empty?
+            files.each { |file| YAML.parse_file(file) or abort "Empty YAML: #{file}" }
+          '
+      - name: Install and run actionlint
+        shell: bash
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106
+          "$(go env GOPATH)/bin/actionlint" -color
+      - name: Check whitespace
+        run: git diff --check
+
+  flutter-windows:
+    name: Flutter Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out clean-room branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/cleanroom-pre13-20260818
+          fetch-depth: 0
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Validate formatting and analysis
+        run: |
+          dart format --output=none --set-exit-if-changed .
+          flutter analyze
+      - name: Run unit and integration tests
+        run: |
+          flutter test
+          flutter test integration_test
+      - name: Build Windows release
+        run: flutter build windows --release
+      - name: Check whitespace
+        run: git diff --check
