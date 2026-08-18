@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.2",
-  "publishedAt": "2026-08-17T07:27:38Z",
+  "version": "1.4.3",
+  "publishedAt": "2026-08-18T23:25:48Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.2/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19552822,
-    "sha256": "16ef57207dbf949f2b85842fe8bee42042ce59e8134616a45b8630a8e1616660"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.3/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19552494,
+    "sha256": "5ae4af7718f4b21bff1579727583c3d7e037f0c1e30f287970b1bc3dabaeecbf"
   },
-  "releaseNotes": "Hotfix crítico: suporte à configuração de idioma da Epic Games, garantindo launcher oficial em inglês e jogo no slot francês/PT-BR.",
+  "releaseNotes": "Atualização de segurança: protege os containers nativos do NTE após atualizações do jogo e revalida ownership por tamanho e SHA-256 antes de sobrescrever arquivos.",
   "mandatory": true
 }
