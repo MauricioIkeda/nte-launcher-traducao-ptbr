@@ -116,9 +116,65 @@ void main() {
     expect(await destination.readAsBytes(), translated);
     expect((await receipts.read(game.path)).receipt, isNotNull);
   });
+
+  test('does not block a pak outside the NTE Paks directory', () async {
+    const translated = [1, 2, 3];
+    const original = [7, 7, 7, 7];
+    const relative = 'Client/WindowsNoEditor/HT/Content/Other/example.pak';
+    final manifest = _manifestForDestination(
+      'example.pak',
+      relative,
+      translated,
+    );
+    final stage = await createStage(sandbox, manifest, const [translated]);
+    final destination = File(p.join(game.path, relative));
+    await destination.parent.create(recursive: true);
+    await destination.writeAsBytes(original);
+
+    await service.install(manifest, stage, game.path);
+
+    expect(await destination.readAsBytes(), translated);
+    final receipt = (await receipts.read(game.path)).receipt;
+    expect(receipt, isNotNull);
+    expect(receipt!.files.single.originalExisted, isTrue);
+  });
+
+  test('does not block a non-container file inside Paks', () async {
+    const translated = [1, 2, 3];
+    const original = [4, 2];
+    const relative = 'Client/WindowsNoEditor/HT/Content/Paks/readme.txt';
+    final manifest = _manifestForDestination(
+      'readme.txt',
+      relative,
+      translated,
+    );
+    final stage = await createStage(sandbox, manifest, const [translated]);
+    final destination = File(p.join(game.path, relative));
+    await destination.parent.create(recursive: true);
+    await destination.writeAsBytes(original);
+
+    await service.install(manifest, stage, game.path);
+
+    expect(await destination.readAsBytes(), translated);
+    final receipt = (await receipts.read(game.path)).receipt;
+    expect(receipt, isNotNull);
+    expect(receipt!.files.single.originalExisted, isTrue);
+  });
 }
 
 TranslationManifest _containerManifest(String name, List<int> contents) {
+  return _manifestForDestination(
+    name,
+    'Client/WindowsNoEditor/HT/Content/Paks/$name',
+    contents,
+  );
+}
+
+TranslationManifest _manifestForDestination(
+  String name,
+  String relativeDestination,
+  List<int> contents,
+) {
   const version = 'nte-auto-20260818-container-test';
   return TranslationManifest.fromJson({
     'schemaVersion': 1,
@@ -127,8 +183,7 @@ TranslationManifest _containerManifest(String name, List<int> contents) {
     'files': [
       {
         'name': name,
-        'relativeDestination':
-            'Client/WindowsNoEditor/HT/Content/Paks/$name',
+        'relativeDestination': relativeDestination,
         'url': 'https://github.com/example/releases/download/$version/$name',
         'size': contents.length,
         'sha256': hashOf(contents),
