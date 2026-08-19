@@ -354,6 +354,7 @@ class _FakeGameLanguageService extends GameLanguageService {
   Future<LanguageSwitchResult> ensureCulture(
     String culture, {
     TextLanguageReceipt? previous,
+    String? gameDirectory,
   }) async {
     ensureCultureCalls++;
     return LanguageSwitchResult(

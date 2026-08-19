@@ -70,6 +70,7 @@ class TranslationVerificationService {
         final prepared = await gameLanguage.ensureCulture(
           'fr',
           previous: languageReceipt,
+          gameDirectory: gameDirectory,
         );
         if (prepared.changed) {
           await log.info(
@@ -288,7 +289,10 @@ class TranslationVerificationService {
     String gameDirectory,
   ) async {
     try {
-      final prepared = await gameLanguage.ensureCulture('fr');
+      final prepared = await gameLanguage.ensureCulture(
+        'fr',
+        gameDirectory: gameDirectory,
+      );
       final textLanguage = prepared.receipt;
       if (textLanguage == null) {
         await log.info(

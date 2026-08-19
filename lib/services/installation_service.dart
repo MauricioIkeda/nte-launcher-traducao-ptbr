@@ -314,6 +314,7 @@ class InstallationService {
           languageSwitch = await gameLanguage.ensureCulture(
             installationCulture,
             previous: previousReceipt?.textLanguage,
+            gameDirectory: gameDirectory,
           );
           if (languageSwitch.changed) {
             await log.info(

@@ -153,6 +153,7 @@ class GameLanguageService {
   Future<LanguageSwitchResult> ensureCulture(
     String culture, {
     TextLanguageReceipt? previous,
+    String? gameDirectory,
   }) async {
     if (culture != 'fr') {
       return const LanguageSwitchResult(
@@ -161,7 +162,10 @@ class GameLanguageService {
       );
     }
 
-    final encrypted = await _detectSingleEncryptedState();
+    final encrypted = await _detectSingleEncryptedState(
+      gameDirectory: gameDirectory,
+      previous: previous,
+    );
     if (encrypted != null) {
       final receipt = _hybridReceipt(encrypted, culture, previous);
       final changed =
@@ -179,7 +183,11 @@ class GameLanguageService {
       return LanguageSwitchResult(changed: changed, receipt: receipt);
     }
 
-    return _ensurePlainCulture(culture, previous: previous);
+    return _ensurePlainCulture(
+      culture,
+      previous: previous,
+      gameDirectory: gameDirectory,
+    );
   }
 
   Future<LanguageRestoreResult> restore(TextLanguageReceipt? receipt) async {
@@ -341,8 +349,12 @@ class GameLanguageService {
   Future<LanguageSwitchResult> _ensurePlainCulture(
     String culture, {
     TextLanguageReceipt? previous,
+    String? gameDirectory,
   }) async {
-    final detected = await _detectPlain();
+    final detected = await _detectPlain(
+      gameDirectory: gameDirectory,
+      previous: previous,
+    );
     if (previous != null) {
       if (detected == null) {
         return LanguageSwitchResult(changed: false, receipt: previous);
@@ -423,9 +435,36 @@ class GameLanguageService {
     return const LanguageRestoreResult(restored: true);
   }
 
-  Future<_EncryptedState?> _detectSingleEncryptedState() async {
+  Future<_EncryptedState?> _detectSingleEncryptedState({
+    String? gameDirectory,
+    TextLanguageReceipt? previous,
+  }) async {
+    final targeted = await _targetedCandidateFiles(gameDirectory);
+    if (targeted != null) {
+      final found = await _detectEncryptedStates(targeted);
+      return found.length == 1 ? found.single : null;
+    }
+
+    if (previous != null && _isAllowedConfigPath(previous.configPath)) {
+      final file = File(previous.configPath);
+      if (await file.exists() &&
+          p.basename(file.path).toLowerCase() == 'gameusersettings.ini') {
+        final state = await _detectEncryptedState(file);
+        if (state != null) {
+          return state;
+        }
+      }
+    }
+
+    final found = await _detectEncryptedStates(_candidateFiles());
+    return found.length == 1 ? found.single : null;
+  }
+
+  Future<List<_EncryptedState>> _detectEncryptedStates(
+    Iterable<File> files,
+  ) async {
     final found = <_EncryptedState>[];
-    for (final file in _candidateFiles()) {
+    for (final file in files) {
       if (!await file.exists() ||
           p.basename(file.path).toLowerCase() != 'gameusersettings.ini') {
         continue;
@@ -435,7 +474,7 @@ class GameLanguageService {
         found.add(state);
       }
     }
-    return found.length == 1 ? found.single : null;
+    return found;
   }
 
   Future<_EncryptedState?> _detectEncryptedState(File file) async {
@@ -545,9 +584,33 @@ class GameLanguageService {
     }
   }
 
-  Future<_DetectedSetting?> _detectPlain() async {
+  Future<_DetectedSetting?> _detectPlain({
+    String? gameDirectory,
+    TextLanguageReceipt? previous,
+  }) async {
+    final targeted = await _targetedCandidateFiles(gameDirectory);
+    if (targeted != null) {
+      return _detectPlainFromFiles(targeted);
+    }
+
+    if (previous != null && _isAllowedConfigPath(previous.configPath)) {
+      final file = File(previous.configPath);
+      if (await file.exists()) {
+        final detected = await _detectPlainFromFiles([file]);
+        if (detected != null) {
+          return detected;
+        }
+      }
+    }
+
+    return _detectPlainFromFiles(_candidateFiles());
+  }
+
+  Future<_DetectedSetting?> _detectPlainFromFiles(
+    Iterable<File> files,
+  ) async {
     final candidates = <_DetectedSetting>[];
-    for (final file in _candidateFiles()) {
+    for (final file in files) {
       if (!await file.exists()) {
         continue;
       }
@@ -606,6 +669,97 @@ class GameLanguageService {
         ? 0
         : 1;
     return (keyOrder[key] ?? 99) * 10 + fileOrder;
+  }
+
+  Future<List<File>?> _targetedCandidateFiles(String? gameDirectory) async {
+    final dataPath = await _resolveGameDataPath(gameDirectory);
+    if (dataPath == null) {
+      return null;
+    }
+    const names = ['GameUserSettings.ini', 'Game.ini', 'UserSettings.ini'];
+    final roots = [
+      p.join(dataPath, 'Config', 'Windows'),
+      p.join(dataPath, 'Config', 'WindowsClient'),
+    ];
+    return [
+      for (final root in roots)
+        for (final name in names) File(p.join(root, name)),
+    ];
+  }
+
+  Future<String?> _resolveGameDataPath(String? gameDirectory) async {
+    final game = gameDirectory?.trim();
+    if (game == null || game.isEmpty) {
+      return null;
+    }
+    final configCandidates = [
+      p.join(game, 'NTEGlobal', 'UserData', 'Config', 'Config.ini'),
+      p.join(game, 'NTE Global', 'UserData', 'Config', 'Config.ini'),
+      p.join(game, 'UserData', 'Config', 'Config.ini'),
+    ];
+    final dataPathPattern = RegExp(
+      r'^\s*dataPath\s*=\s*(.*?)\s*$',
+      caseSensitive: false,
+      multiLine: true,
+    );
+    for (final path in configCandidates) {
+      final file = File(path);
+      if (!await file.exists()) {
+        continue;
+      }
+      final text = await _readTextFile(file);
+      if (text == null) {
+        continue;
+      }
+      final match = dataPathPattern.firstMatch(text);
+      if (match == null) {
+        continue;
+      }
+      final raw = _unquote(match.group(1)!.trim());
+      if (!_isAllowedDataPath(raw)) {
+        continue;
+      }
+      return p.normalize(p.absolute(raw));
+    }
+    return null;
+  }
+
+  Future<String?> _readTextFile(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      try {
+        return utf8.decode(bytes);
+      } on FormatException {
+        return latin1.decode(bytes);
+      }
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  bool _isAllowedDataPath(String value) {
+    final local = _localAppData?.trim();
+    if (local == null || local.isEmpty || value.trim().isEmpty) {
+      return false;
+    }
+    if (!p.isAbsolute(value)) {
+      return false;
+    }
+    final base = p.normalize(p.absolute(p.join(local, 'HT')));
+    final candidate = p.normalize(p.absolute(value));
+    final compareBase = Platform.isWindows ? base.toLowerCase() : base;
+    final compareCandidate = Platform.isWindows
+        ? candidate.toLowerCase()
+        : candidate;
+    if (!p.isWithin(compareBase, compareCandidate)) {
+      return false;
+    }
+    return const {
+      'saved_global',
+      'saved_globalepic',
+      'saved_globalsteam',
+      'saved',
+    }.contains(p.basename(compareCandidate).toLowerCase());
   }
 
   List<File> _candidateFiles() {
