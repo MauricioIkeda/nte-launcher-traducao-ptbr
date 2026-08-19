@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.3",
-  "publishedAt": "2026-08-18T23:25:48Z",
+  "version": "1.4.4",
+  "publishedAt": "2026-08-19T17:36:26Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.3/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19552494,
-    "sha256": "5ae4af7718f4b21bff1579727583c3d7e037f0c1e30f287970b1bc3dabaeecbf"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.4/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19556885,
+    "sha256": "ef9f84a32bbbab7df2fb2506a920c0a2df8cf7e36ba0570c721f98c7f6141109"
   },
-  "releaseNotes": "Atualização de segurança: protege os containers nativos do NTE após atualizações do jogo e revalida ownership por tamanho e SHA-256 antes de sobrescrever arquivos.",
+  "releaseNotes": "Hotfix Steam/Epic: seleciona o perfil correto de idioma quando as duas instalações coexistem, garantindo que a tradução PT-BR hospedada no slot francês seja ativada automaticamente na instalação escolhida.",
   "mandatory": true
 }
