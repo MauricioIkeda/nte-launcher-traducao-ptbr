@@ -71,15 +71,13 @@ class LegacyMigrationService {
           gameDirectory,
           relative,
         );
-        if (!await destination.exists()) {
-          await log.info(
-            'Recibo legado preservado: a instalação está parcialmente '
-            'restaurada ou incompleta.',
-          );
-          return false;
-        }
-        final installedSize = await destination.length();
-        final installedHash = await integrity.calculateSha256(destination);
+        final destinationExists = await destination.exists();
+        final installedSize = destinationExists
+            ? await destination.length()
+            : asset.size;
+        final installedHash = destinationExists
+            ? await integrity.calculateSha256(destination)
+            : asset.sha256;
 
         final hadOriginal = originalsExisted[relative] == true;
         int? originalSize;
@@ -102,6 +100,13 @@ class LegacyMigrationService {
             originalSha256: originalHash,
           ),
         );
+        if (!destinationExists) {
+          await log.info(
+            'Migração legada preservou a propriedade de $relative mesmo '
+            'com o arquivo ausente; o manifesto atual fornece a identidade '
+            'esperada para permitir reparo ou restauração segura.',
+          );
+        }
       }
 
       final storage = await receipts.storageFor(gameDirectory);
