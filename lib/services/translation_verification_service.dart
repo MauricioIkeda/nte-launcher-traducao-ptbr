@@ -312,22 +312,40 @@ class TranslationVerificationService {
     required List<String> validFiles,
   }) async {
     final manifest = loadedManifest.manifest;
+    final storage = await receipts.storageFor(gameDirectory);
     final validKeys = validFiles
         .map((relative) => relative.replaceAll('\\', '/').toLowerCase())
         .toSet();
     final entries = <InstalledFileReceipt>[];
+    var preservedOriginals = 0;
     for (final asset in manifest.files) {
       final relative = safePaths.normalizeRelative(asset.relativeDestination);
       final key = relative.replaceAll('\\', '/').toLowerCase();
       if (!validKeys.contains(key)) {
         continue;
       }
+
+      final original = await safePaths.resolveFile(
+        storage.originals.path,
+        relative,
+      );
+      final originalExisted = await original.exists();
+      final originalSize = originalExisted ? await original.length() : null;
+      final originalSha256 = originalExisted
+          ? await integrity.calculateSha256(original)
+          : null;
+      if (originalExisted) {
+        preservedOriginals++;
+      }
+
       entries.add(
         InstalledFileReceipt(
           relativePath: relative,
           installedSize: asset.size,
           installedSha256: asset.sha256,
-          originalExisted: false,
+          originalExisted: originalExisted,
+          originalSize: originalSize,
+          originalSha256: originalSha256,
         ),
       );
     }
@@ -335,7 +353,6 @@ class TranslationVerificationService {
       return null;
     }
 
-    final storage = await receipts.storageFor(gameDirectory);
     final recovered = InstallReceipt(
       schemaVersion: InstallReceipt.currentSchemaVersion,
       translationVersion: manifest.translationVersion,
@@ -351,7 +368,8 @@ class TranslationVerificationService {
       'Recibo de recuperação criado para ${storage.id.substring(0, 12)}: '
       '${entries.length} arquivo(s) no disco correspondem exatamente ao '
       'manifesto ${manifest.translationVersion}; nenhum arquivo divergente '
-      'foi adotado. Arquivos ausentes permanecem pendentes para reparo.',
+      'foi adotado. $preservedOriginals backup(s) original(is) existente(s) '
+      'foram preservados. Arquivos ausentes permanecem pendentes para reparo.',
     );
     return recovered;
   }
