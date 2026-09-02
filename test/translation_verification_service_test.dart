@@ -184,7 +184,10 @@ void main() {
       expect(result.missingFiles, hasLength(1));
       expect(result.receiptVersion, manifest.translationVersion);
       expect(recovered?.files, hasLength(1));
-      expect(recovered?.files.single.relativePath, manifest.files.first.relativeDestination);
+      expect(
+        recovered?.files.single.relativePath,
+        manifest.files.first.relativeDestination,
+      );
       expect(recovered?.files.single.originalExisted, isFalse);
     },
   );
