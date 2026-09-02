@@ -46,7 +46,7 @@ void main() {
 
   tearDown(() => sandbox.delete(recursive: true));
 
-  test('reports all real files as current when size and hash match', () async {
+  test('recovers a receipt when all real files match the manifest', () async {
     await _writeManifestFiles(game, manifest, contents);
     final progress = <int>[];
     final result = await verifier.verify(
@@ -54,8 +54,13 @@ void main() {
       gameDirectory: game.path,
       onProgress: (_, verified, _) => progress.add(verified),
     );
+    final recovered = (await receipts.read(game.path)).receipt;
+
     expect(result.status, TranslationInstallationStatus.installedCurrent);
     expect(result.validFiles, hasLength(2));
+    expect(result.receiptVersion, manifest.translationVersion);
+    expect(recovered?.files, hasLength(2));
+    expect(recovered?.files.every((entry) => !entry.originalExisted), isTrue);
     expect(progress, [1, 2]);
   });
 
@@ -164,16 +169,25 @@ void main() {
     },
   );
 
-  test('reports incomplete when only part of the files exists', () async {
-    await _writeOne(game, manifest.files.first, contents.first);
-    final result = await verifier.verify(
-      loadedManifest: loaded(manifest),
-      gameDirectory: game.path,
-    );
-    expect(result.status, TranslationInstallationStatus.incomplete);
-    expect(result.validFiles, hasLength(1));
-    expect(result.missingFiles, hasLength(1));
-  });
+  test(
+    'recovers a partial exact install so it can be repaired or removed',
+    () async {
+      await _writeOne(game, manifest.files.first, contents.first);
+      final result = await verifier.verify(
+        loadedManifest: loaded(manifest),
+        gameDirectory: game.path,
+      );
+      final recovered = (await receipts.read(game.path)).receipt;
+
+      expect(result.status, TranslationInstallationStatus.incomplete);
+      expect(result.validFiles, hasLength(1));
+      expect(result.missingFiles, hasLength(1));
+      expect(result.receiptVersion, manifest.translationVersion);
+      expect(recovered?.files, hasLength(1));
+      expect(recovered?.files.single.relativePath, manifest.files.first.relativeDestination);
+      expect(recovered?.files.single.originalExisted, isFalse);
+    },
+  );
 
   test(
     'keeps a receipt-backed fully missing installation repairable',
