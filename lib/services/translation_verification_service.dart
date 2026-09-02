@@ -151,6 +151,17 @@ class TranslationVerificationService {
         unverifiable,
       );
     }
+
+    var recoveredOrphan = false;
+    if (receipt == null && valid.isNotEmpty && modified.isEmpty) {
+      receipt = await _recoverVerifiedOrphanReceipt(
+        gameDirectory: gameDirectory,
+        loadedManifest: loadedManifest,
+        validFiles: valid,
+      );
+      recoveredOrphan = receipt != null;
+    }
+
     if (valid.length == manifest.files.length) {
       if (manifest.localization?.installationCulture == 'fr' &&
           receipt != null &&
@@ -168,6 +179,17 @@ class TranslationVerificationService {
         modified,
         unverifiable,
         detectedVersion: manifest.translationVersion,
+      );
+    }
+
+    if (recoveredOrphan && missing.isNotEmpty) {
+      return _result(
+        TranslationInstallationStatus.incomplete,
+        receipt,
+        valid,
+        missing,
+        modified,
+        unverifiable,
       );
     }
 
@@ -282,6 +304,56 @@ class TranslationVerificationService {
       modified,
       unverifiable,
     );
+  }
+
+  Future<InstallReceipt?> _recoverVerifiedOrphanReceipt({
+    required String gameDirectory,
+    required LoadedTranslationManifest loadedManifest,
+    required List<String> validFiles,
+  }) async {
+    final manifest = loadedManifest.manifest;
+    final validKeys = validFiles
+        .map((relative) => relative.replaceAll('\\', '/').toLowerCase())
+        .toSet();
+    final entries = <InstalledFileReceipt>[];
+    for (final asset in manifest.files) {
+      final relative = safePaths.normalizeRelative(asset.relativeDestination);
+      final key = relative.replaceAll('\\', '/').toLowerCase();
+      if (!validKeys.contains(key)) {
+        continue;
+      }
+      entries.add(
+        InstalledFileReceipt(
+          relativePath: relative,
+          installedSize: asset.size,
+          installedSha256: asset.sha256,
+          originalExisted: false,
+        ),
+      );
+    }
+    if (entries.isEmpty) {
+      return null;
+    }
+
+    final storage = await receipts.storageFor(gameDirectory);
+    final recovered = InstallReceipt(
+      schemaVersion: InstallReceipt.currentSchemaVersion,
+      translationVersion: manifest.translationVersion,
+      installedAt: DateTime.now().toUtc(),
+      gameDirectory: storage.gameDirectory,
+      manifestPublishedAt: manifest.publishedAt,
+      gameBuildId: manifest.gameBuildId,
+      sourceHash: manifest.sourceHash,
+      files: entries,
+    );
+    await receipts.write(gameDirectory, recovered);
+    await log.info(
+      'Recibo de recuperação criado para ${storage.id.substring(0, 12)}: '
+      '${entries.length} arquivo(s) no disco correspondem exatamente ao '
+      'manifesto ${manifest.translationVersion}; nenhum arquivo divergente '
+      'foi adotado. Arquivos ausentes permanecem pendentes para reparo.',
+    );
+    return recovered;
   }
 
   Future<InstallReceipt> _migrateHostedLanguageReceipt(
