@@ -115,10 +115,35 @@ class LauncherLog {
     );
     result = result.replaceAllMapped(
       RegExp(
-        r'''(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|client[_-]?secret|session[_-]?(?:id|token)|cookie|set-cookie)\b["']?\s*[:=]\s*["']?)([^"'\s&,;}]+)''',
+        r'''(\b(?:api[_-]?key|token|id[_-]?token|access[_-]?token|refresh[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|session[_-]?(?:id|token)|cookie|set-cookie)\b["']?\s*[:=]\s*["']?)([^"'\s&,;}]+)''',
         caseSensitive: false,
       ),
       (match) => '${match.group(1)}[REDACTED]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'''(\b(?:uid|user[_-]?id|account[_-]?id|role[_-]?(?:id|name)|character[_-]?(?:id|name)|device[_-]?id|did)\b["']?\s*[:=]\s*["']?)([^"'\s&,;}]+)''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}[REDACTED]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'^([^\r\n]*\[CHDGamePlayerMgr::setRoleInfo\])[^\r\n]*$',
+        multiLine: true,
+      ),
+      (match) => '${match.group(1)} [REDACTED_PLAYER_INFO]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'([A-Za-z]:[\\/]+Users[\\/]+)[^\\/\r\n]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}[REDACTED_USER]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(r'(/home/)[^/\r\n]+', caseSensitive: false),
+      (match) => '${match.group(1)}[REDACTED_USER]',
     );
     return result;
   }

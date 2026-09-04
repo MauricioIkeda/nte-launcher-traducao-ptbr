@@ -149,8 +149,57 @@ void main() {
     );
     await officialLog.parent.create(recursive: true);
     await officialLog.writeAsString(
+      'Current version: 1.0.8.0807_2(build:76a5250a)\n'
       'all ready, wait for start game access_token=hidden-game-token',
     );
+
+    // Reproduce the real UniversalSigBypasser timestamp shape observed in NTE:
+    // no surrounding brackets and local wall-clock time.
+    await paths.diagnosticEventsFile.parent.create(recursive: true);
+    final launchAt = DateTime.now().toUtc().subtract(
+      const Duration(seconds: 1),
+    );
+    await paths.diagnosticEventsFile.writeAsString(
+      '${jsonEncode({'at': launchAt.toIso8601String(), 'event': 'game_launch_started', 'details': <String, Object?>{}})}\n',
+    );
+    final sigLog = File(
+      p.join(
+        game.path,
+        'Client',
+        'WindowsNoEditor',
+        'HT',
+        'Binaries',
+        'Win64',
+        'SigBypasser.log',
+      ),
+    );
+    await sigLog.parent.create(recursive: true);
+    final sigTimestamp = DateTime.now().toIso8601String().replaceFirst(
+      'T',
+      ' ',
+    );
+    await sigLog.writeAsString(
+      '$sigTimestamp [INFO] <UniversalPatch:43>: UniversalSigBypasser Loaded.\n'
+      '$sigTimestamp [INFO] <UniversalPatch:66>: Pattern 2 found at 0x1\n'
+      '$sigTimestamp [INFO] <UniversalPatch:81>: Patch applied at 0x2\n'
+      '$sigTimestamp [INFO] <UniversalPatch:91>: Bypass process ended.\n',
+    );
+
+    // xinput1_3.dll is a loader-like filename but can be a legitimate game
+    // runtime dependency. Keep it in inventory without flagging it as a mod.
+    final xinput = File(
+      p.join(
+        game.path,
+        'Client',
+        'WindowsNoEditor',
+        'HT',
+        'Binaries',
+        'Win64',
+        'xinput1_3.dll',
+      ),
+    );
+    await xinput.writeAsBytes(const [1, 2, 3, 4]);
+
     await paths.officialLaunchResultFile.parent.create(recursive: true);
     await paths.officialLaunchResultFile.writeAsString(
       jsonEncode({
@@ -164,13 +213,43 @@ void main() {
     final diagnostics = await file.readAsString();
     final decoded = jsonDecode(diagnostics) as Map<String, dynamic>;
 
-    expect(decoded['schemaVersion'], 3);
+    expect(decoded['schemaVersion'], 4);
     expect(diagnostics, contains('verificationStatus'));
     expect(decoded['privacy']['singleFile'], isTrue);
-    expect(decoded['launcher']['gameDirectory'], game.path);
-    expect(decoded['game']['normalizedDirectory'], game.path);
+    final redactedGamePath = LauncherLog.redactSensitiveValues(game.path);
+    expect(decoded['launcher']['gameDirectory'], redactedGamePath);
+    expect(decoded['game']['normalizedDirectory'], redactedGamePath);
+    expect(
+      decoded['game']['actualGameBuildEvidence']['detectedVersion'],
+      '1.0.8.0807_2',
+    );
+    expect(
+      decoded['game']['actualGameBuildEvidence']['detectedBuild'],
+      '76a5250a',
+    );
     expect(decoded['launcher']['verification'], isA<Map<String, dynamic>>());
     expect(decoded['runtime'], isA<Map<String, dynamic>>());
+    expect(decoded['diagnosticCapabilities']['fullGameClientSha256'], isTrue);
+    expect(decoded['startupHealth'], isA<Map<String, dynamic>>());
+    expect(decoded['bootstrapHealth'], isA<Map<String, dynamic>>());
+    expect(decoded['bootstrapHistory'], isA<List<dynamic>>());
+    expect(decoded['game']['translationRuntime'], isA<Map<String, dynamic>>());
+    expect(
+      decoded['game']['translationRuntime']['derivedStatus'],
+      'patch_applied_after_last_launch',
+    );
+    expect(
+      decoded['game']['translationRuntime']['markersAtOrAfterLastLaunch']['patchApplied'],
+      1,
+    );
+    expect(
+      decoded['game']['modAndLoaderInventory']['foreignLoaderCandidateCount'],
+      0,
+    );
+    expect(
+      decoded['game']['modAndLoaderInventory'],
+      isA<Map<String, dynamic>>(),
+    );
     expect(decoded['operationHistory'], isA<List<dynamic>>());
     expect(decoded['embeddedLogs']['launcher'], isA<List<dynamic>>());
     expect(decoded['embeddedLogs']['game'], isNotEmpty);

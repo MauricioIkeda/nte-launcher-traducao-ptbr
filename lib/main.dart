@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:ui';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'core/app_paths.dart';
+import 'core/bootstrap_diagnostics.dart';
 import 'core/launcher_log.dart';
 import 'core/trusted_http_client.dart';
 import 'launcher_controller.dart';
@@ -32,57 +35,147 @@ const _ink = Color(0xFF07182B);
 const _muted = Color(0xFFA9B9C9);
 
 void main(List<String> arguments) {
-  WidgetsFlutterBinding.ensureInitialized();
+  BootstrapDiagnostics.recordSync(
+    'process_started',
+    details: {
+      'arguments': arguments,
+      'operatingSystem': Platform.operatingSystem,
+      'operatingSystemVersion': Platform.operatingSystemVersion,
+      'resolvedExecutable': Platform.resolvedExecutable,
+    },
+  );
+  BootstrapDiagnostics.recordSync(
+    'bootstrap_stage',
+    details: {'stage': 'flutter_binding_initialize'},
+  );
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+  } catch (error, stackTrace) {
+    BootstrapDiagnostics.recordSync(
+      'bootstrap_failed',
+      details: {
+        'stage': 'flutter_binding_initialize',
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+        'stackTrace': stackTrace.toString().split('\n').take(80).join('\n'),
+      },
+    );
+    rethrow;
+  }
+
+  final previousFlutterError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    BootstrapDiagnostics.recordSync(
+      'flutter_uncaught_error',
+      details: {
+        'exceptionType': details.exception.runtimeType.toString(),
+        'exception': details.exceptionAsString(),
+        'library': details.library,
+        'context': details.context?.toDescription(),
+        'stackTrace': details.stack?.toString().split('\n').take(80).join('\n'),
+      },
+    );
+    if (previousFlutterError != null) {
+      previousFlutterError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+
+  final dispatcher = PlatformDispatcher.instance;
+  final previousPlatformError = dispatcher.onError;
+  dispatcher.onError = (error, stackTrace) {
+    BootstrapDiagnostics.recordSync(
+      'platform_uncaught_error',
+      details: {
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+        'stackTrace': stackTrace.toString().split('\n').take(80).join('\n'),
+      },
+    );
+    return previousPlatformError?.call(error, stackTrace) ?? false;
+  };
+
   runApp(LauncherBootstrap(arguments: arguments));
+  BootstrapDiagnostics.recordSync('ui_attached');
 }
 
 Future<LauncherController> _initializeLauncher(List<String> arguments) async {
-  await TrustedHttpClientFactory.initialize().timeout(
-    const Duration(seconds: 15),
-  );
-  final paths = await AppPaths.create().timeout(const Duration(seconds: 15));
-  final log = LauncherLog(paths.logFile);
-  final integrity = FileIntegrityService();
-  final safePaths = SafePathService();
-  final receipts = ReceiptRepository(paths, log, safePaths);
-  final installer = InstallationService(
-    paths,
-    log,
-    integrity: integrity,
-    safePaths: safePaths,
-    receipts: receipts,
-  );
-  final verifier = TranslationVerificationService(
-    integrity: integrity,
-    receipts: receipts,
-    safePaths: safePaths,
-    log: log,
-  );
-  final elevation = ElevationService(log);
-  return LauncherController(
-    paths: paths,
-    log: log,
-    appUpdates: AppUpdateService(paths, log),
-    manifests: ManifestRepository(paths, log),
-    downloads: DownloadService(paths, log, integrity: integrity),
-    elevation: elevation,
-    gamePlatforms: GamePlatformService(),
-    installer: installer,
-    settings: SettingsService(),
-    verifier: verifier,
-    migration: LegacyMigrationService(
-      paths: paths,
-      log: log,
+  try {
+    await BootstrapDiagnostics.record(
+      'bootstrap_stage',
+      details: {'stage': 'trusted_http_initialize'},
+    );
+    await TrustedHttpClientFactory.initialize().timeout(
+      const Duration(seconds: 15),
+    );
+    await BootstrapDiagnostics.record(
+      'bootstrap_stage',
+      details: {'stage': 'app_paths_create'},
+    );
+    final paths = await AppPaths.create().timeout(const Duration(seconds: 15));
+    await BootstrapDiagnostics.record(
+      'bootstrap_stage',
+      details: {'stage': 'service_graph_construct'},
+    );
+    final log = LauncherLog(paths.logFile);
+    final integrity = FileIntegrityService();
+    final safePaths = SafePathService();
+    final receipts = ReceiptRepository(paths, log, safePaths);
+    final installer = InstallationService(
+      paths,
+      log,
+      integrity: integrity,
+      safePaths: safePaths,
+      receipts: receipts,
+    );
+    final verifier = TranslationVerificationService(
       integrity: integrity,
       receipts: receipts,
       safePaths: safePaths,
-    ),
-    preInstallation: PreInstallationService(
-      installer: installer,
+      log: log,
+    );
+    final elevation = ElevationService(log);
+    final controller = LauncherController(
+      paths: paths,
+      log: log,
+      appUpdates: AppUpdateService(paths, log),
+      manifests: ManifestRepository(paths, log),
+      downloads: DownloadService(paths, log, integrity: integrity),
       elevation: elevation,
-    ),
-    autoInstall: arguments.contains('--install'),
-  );
+      gamePlatforms: GamePlatformService(),
+      installer: installer,
+      settings: SettingsService(),
+      verifier: verifier,
+      migration: LegacyMigrationService(
+        paths: paths,
+        log: log,
+        integrity: integrity,
+        receipts: receipts,
+        safePaths: safePaths,
+      ),
+      preInstallation: PreInstallationService(
+        installer: installer,
+        elevation: elevation,
+      ),
+      autoInstall: arguments.contains('--install'),
+    );
+    await BootstrapDiagnostics.record(
+      'bootstrap_completed',
+      details: {'controllerCreated': true},
+    );
+    return controller;
+  } catch (error, stackTrace) {
+    BootstrapDiagnostics.recordSync(
+      'bootstrap_failed',
+      details: {
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+        'stackTrace': stackTrace.toString().split('\n').take(80).join('\n'),
+      },
+    );
+    rethrow;
+  }
 }
 
 class LauncherBootstrap extends StatefulWidget {
@@ -148,6 +241,42 @@ class _LauncherStartupPage extends StatelessWidget {
   final Object? error;
   final VoidCallback onRetry;
 
+  Future<void> _saveBootstrapDiagnostic(BuildContext context) async {
+    try {
+      final selectedPath = await FilePicker.saveFile(
+        dialogTitle: 'Salvar diagnóstico de inicialização',
+        fileName: 'nte-bootstrap-diagnostico.json',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+      );
+      if (selectedPath == null) return;
+      final destination = File(selectedPath);
+      await BootstrapDiagnostics.exportStandalone(destination);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Diagnóstico de inicialização salvo em ${destination.path}',
+          ),
+        ),
+      );
+    } catch (error) {
+      BootstrapDiagnostics.recordSync(
+        'bootstrap_standalone_diagnostic_export_failed',
+        details: {
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+        },
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível salvar o diagnóstico: $error'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final failed = error != null;
@@ -209,10 +338,24 @@ class _LauncherStartupPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: onRetry,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Tentar novamente'),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: onRetry,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Tentar novamente'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _saveBootstrapDiagnostic(context),
+                          icon: const Icon(Icons.save_alt_rounded),
+                          label: const Text(
+                            'Salvar diagnóstico de inicialização',
+                          ),
+                        ),
+                      ],
                     ),
                   ] else ...[
                     const SizedBox(height: 28),

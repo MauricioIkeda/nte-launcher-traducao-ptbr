@@ -6,9 +6,12 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/app_paths.dart';
+import '../core/bootstrap_diagnostics.dart';
 import '../core/launcher_log.dart';
 import '../core/runtime_environment.dart';
+import '../models/install_receipt.dart';
 import '../models/translation_manifest.dart';
+import 'game_language_service.dart';
 import 'game_platform_service.dart';
 import 'installation_service.dart';
 
@@ -22,7 +25,33 @@ class DiagnosticService {
   static const _maxHistoryBytes = 512 * 1024;
   static const _maxEmbeddedLauncherLogBytes = 1024 * 1024;
   static const _maxGameLogBytes = 128 * 1024;
-  static const _maxGameLogs = 10;
+  static const _maxHtLogScanBytes = 512 * 1024;
+  static const _maxSigLogScanBytes = 256 * 1024;
+  static const _maxGameLogs = 14;
+  static const _maxManagedInstallations = 50;
+  static const _maxInventoryEntries = 250;
+  static const _maxModCandidateHashBytes = 32 * 1024 * 1024;
+
+  static const _knownProxyDlls = <String>{
+    'version.dll',
+    'winmm.dll',
+    'dsound.dll',
+    'dinput8.dll',
+    'xinput1_3.dll',
+    'xinput9_1_0.dll',
+    'dxgi.dll',
+    'd3d11.dll',
+    'd3d12.dll',
+  };
+
+  // Some filenames that can act as proxy loaders are also legitimate
+  // runtime dependencies shipped by games. Keep them visible in the
+  // inventory, but do not accuse them of being foreign mods based on the
+  // filename alone.
+  static const _commonRuntimeDllNames = <String>{
+    'xinput1_3.dll',
+    'xinput9_1_0.dll',
+  };
 
   final AppPaths paths;
   final LauncherLog log;
@@ -76,10 +105,17 @@ class DiagnosticService {
     await paths.diagnostics.create(recursive: true);
 
     final createdAt = DateTime.now().toUtc();
+    final operationHistory = await _readOperationHistory();
+    final bootstrapHistory = await BootstrapDiagnostics.readRecent();
     final runtime = await _collectRuntime();
-    final game = await _collectGame(gameDirectory, gamePlatform, manifest);
+    final game = await _collectGame(
+      gameDirectory,
+      gamePlatform,
+      manifest,
+      operationHistory,
+    );
     final payload = <String, Object?>{
-      'schemaVersion': 3,
+      'schemaVersion': 4,
       'reportId': sha256
           .convert(
             utf8.encode(
@@ -93,18 +129,37 @@ class DiagnosticService {
         'singleFile': true,
         'description':
             'Relatório autocontido para suporte. Inclui caminhos locais, '
-            'metadados técnicos e trechos de logs com segredos conhecidos '
-            'suprimidos; não inclui o ambiente completo, senhas ou tokens.',
+            'metadados técnicos, inventário limitado de possíveis mods e '
+            'trechos filtrados de logs com segredos conhecidos suprimidos; '
+            'não inclui o ambiente completo, senhas ou tokens.',
         'redactionApplied': true,
       },
+      'diagnosticCapabilities': {
+        'runtimeLoaderEvidence': true,
+        'bootstrapBlackBox': true,
+        'globalErrorCapture': true,
+        'loadedModuleInspection': Platform.isWindows,
+        'fullGameClientSha256': true,
+        'foreignModInventory': true,
+        'languageConfigurationInspection': true,
+        'privilegeAndUacInspection': Platform.isWindows,
+        'wineProtonInspection': true,
+        'startupInterruptionAnalysis': true,
+        'filteredUnrealLogInspection': true,
+      },
       'launcher': _redactObject(launcherState),
+      'bootstrapHealth': _analyzeBootstrapHistory(bootstrapHistory),
+      'bootstrapHistory': bootstrapHistory,
+      'startupHealth': _analyzeStartupHistory(operationHistory),
       'runtime': runtime,
       'game': game,
       'applicationStorage': await _directorySummary(paths.root),
+      'storageState': await _collectStorageState(gameDirectory),
+      'managedInstallations': await _collectManagedInstallations(gameDirectory),
       'lastOfficialLaunchAutomation': await _readJsonFile(
         paths.officialLaunchResultFile,
       ),
-      'operationHistory': await _readOperationHistory(),
+      'operationHistory': operationHistory,
       'embeddedLogs': {
         'launcher': await log.diagnosticExcerpts(
           maxTotalBytes: _maxEmbeddedLauncherLogBytes,
@@ -115,7 +170,7 @@ class DiagnosticService {
 
     final temporary = File('${paths.diagnosticFile.path}.tmp');
     await temporary.writeAsString(
-      '${const JsonEncoder.withIndent('  ').convert(payload)}\n',
+      '${const JsonEncoder.withIndent('  ').convert(_redactObject(payload))}\n',
       flush: true,
     );
     if (await paths.diagnosticFile.exists()) {
@@ -123,7 +178,7 @@ class DiagnosticService {
     }
     await temporary.rename(paths.diagnosticFile.path);
     await log.info(
-      'Diagnóstico autocontido schema 3 exportado para '
+      'Diagnóstico autocontido schema 4 exportado para '
       '${paths.diagnosticFile.path}.',
     );
     return paths.diagnosticFile;
@@ -150,6 +205,13 @@ class DiagnosticService {
       'XDG_CURRENT_DESKTOP',
       'WAYLAND_DISPLAY',
       'DISPLAY',
+      'GDK_BACKEND',
+      'GDK_SCALE',
+      'QT_QPA_PLATFORM',
+      'QT_SCALE_FACTOR',
+      'DXVK_LOG_LEVEL',
+      'VKD3D_DEBUG',
+      'MANGOHUD',
     ]) {
       final value = Platform.environment[key];
       if (value != null && value.trim().isNotEmpty) {
@@ -203,6 +265,16 @@ class DiagnosticService {
         'dwProtonDetected': dwProtonDetected,
         'indicators': indicators,
       },
+      'privilege': await _privilegeState(),
+      'uacPolicy': await _uacPolicy(),
+      'processMitigation': Platform.isWindows && !RuntimeEnvironment.isWine
+          ? await _powershellJson(
+              r'Get-ProcessMitigation -Name HTGame.exe -ErrorAction Stop | Select-Object DEP,ASLR,CFG,ImageLoad,Signature | ConvertTo-Json -Depth 6 -Compress',
+            )
+          : null,
+      'systemResources': await _systemResources(),
+      'graphics': await _graphicsInfo(),
+      'securityProducts': await _securityProducts(),
       'relevantEnvironment': environment,
       'commandAvailability': await _commandAvailability(),
       'relevantProcesses': await _relevantProcesses(),
@@ -213,6 +285,7 @@ class DiagnosticService {
     String? gameDirectory,
     GamePlatformInfo? gamePlatform,
     TranslationManifest? manifest,
+    List<Object?> operationHistory,
   ) async {
     if (gameDirectory == null) {
       return {
@@ -260,6 +333,7 @@ class DiagnosticService {
       'directoryWasNormalized': resolution?.wasAdjusted ?? false,
       'installationStorageId': storage.id,
       'platform': gamePlatform?.toDiagnosticJson(),
+      'pathEnvironment': await _pathEnvironment(normalizedDirectory),
       'manifest': manifest == null
           ? null
           : {
@@ -283,6 +357,7 @@ class DiagnosticService {
       'receipt': receipt?.toJson(),
       'receiptError': receiptRead.error?.toString(),
       'temporaryReceiptFound': receiptRead.temporaryReceiptFound,
+      'actualGameBuildEvidence': await _gameBuildEvidence(normalizedDirectory),
       'sourceIdentityComparison': {
         'manifestGameBuildId': manifest?.gameBuildId,
         'installedGameBuildId': receipt?.gameBuildId,
@@ -290,6 +365,9 @@ class DiagnosticService {
           manifest?.gameBuildId,
           receipt?.gameBuildId,
         ),
+        'note':
+            'Compara o manifesto com o recibo instalado; não representa, por '
+            'si só, o build real atualmente executado pelo jogo.',
         'manifestSourceHash': manifest?.sourceHash,
         'installedSourceHash': receipt?.sourceHash,
         'sourceHashMatches': _equalOptional(
@@ -305,9 +383,574 @@ class DiagnosticService {
           for (final file in uniqueInternal.values)
             await _describeFile(file, includeHash: true),
         ],
-        'gameClient': await _describeFile(htGame),
+        'gameClient': await _describeFile(
+          htGame,
+          includeHash: true,
+          hashLimitBytes: null,
+        ),
+      },
+      'languageConfiguration': await _languageConfiguration(receipt),
+      'translationRuntime': await _translationRuntime(
+        normalizedDirectory,
+        operationHistory,
+      ),
+      'modAndLoaderInventory': await _modAndLoaderInventory(
+        normalizedDirectory,
+        manifest,
+      ),
+      'installationStorage': {
+        'root': await _directorySummary(storage.root),
+        'originals': await _directorySummary(storage.originals),
+        'transactions': await _directorySummary(storage.transactions),
       },
     };
+  }
+
+  Future<Map<String, Object?>> _gameBuildEvidence(String gameDirectory) async {
+    final logRoots = <Directory>[
+      Directory(p.join(gameDirectory, 'NTEGlobal', 'UserData', 'Log')),
+      Directory(p.join(gameDirectory, 'NTE Global', 'UserData', 'Log')),
+      Directory(p.join(gameDirectory, 'UserData', 'Log')),
+    ];
+    final seen = <String>{};
+    final launcherCandidates = <File>[];
+    final updateCandidates = <File>[];
+    for (final root in logRoots) {
+      final key = p.normalize(root.path).toLowerCase();
+      if (!seen.add(key)) continue;
+      launcherCandidates.add(File(p.join(root.path, 'NTEGlobalGame.log')));
+      updateCandidates.add(File(p.join(root.path, 'NTEGlobalUpdate.log')));
+    }
+
+    final launcher = await _latestExistingFile(launcherCandidates);
+    final update = await _latestExistingFile(updateCandidates);
+    final launcherEvidence = launcher == null
+        ? null
+        : await _launcherBuildEvidence(launcher);
+    final updateEvidence = update == null
+        ? null
+        : await _updateBuildEvidence(update);
+    return {
+      'launcher': launcherEvidence,
+      'updater': updateEvidence,
+      'detectedVersion':
+          launcherEvidence?['version'] ??
+          updateEvidence?['currentVersion'] ??
+          updateEvidence?['availableVersion'],
+      'detectedBuild':
+          launcherEvidence?['build'] ??
+          updateEvidence?['currentBuild'] ??
+          updateEvidence?['availableBuild'],
+      'note':
+          'Evidência extraída dos logs do launcher oficial do NTE. '
+          'O formato pode diferir do gameBuildId editorial do manifesto; '
+          'por isso não é declarada compatibilidade automaticamente.',
+    };
+  }
+
+  Future<File?> _latestExistingFile(List<File> candidates) async {
+    final existing = <File>[];
+    for (final file in candidates) {
+      if (await file.exists()) existing.add(file);
+    }
+    if (existing.isEmpty) return null;
+    existing.sort((first, second) {
+      try {
+        return second.lastModifiedSync().compareTo(first.lastModifiedSync());
+      } catch (_) {
+        return 0;
+      }
+    });
+    return existing.first;
+  }
+
+  Future<Map<String, Object?>> _launcherBuildEvidence(File file) async {
+    final result = <String, Object?>{'file': await _describeFile(file)};
+    try {
+      final bytes = await _readTailBytes(file, _maxHtLogScanBytes);
+      final source = utf8.decode(bytes, allowMalformed: true);
+      final matches = RegExp(
+        r'Current version:\s*([^\s(]+)\s*\(build:([^\)]+)\)',
+        caseSensitive: false,
+      ).allMatches(source).toList();
+      if (matches.isNotEmpty) {
+        final match = matches.last;
+        result['version'] = match.group(1)?.trim();
+        result['build'] = match.group(2)?.trim();
+      }
+    } catch (error) {
+      result['readError'] = error.toString();
+    }
+    return result;
+  }
+
+  Future<Map<String, Object?>> _updateBuildEvidence(File file) async {
+    final result = <String, Object?>{'file': await _describeFile(file)};
+    try {
+      final bytes = await _readTailBytes(file, _maxHtLogScanBytes);
+      final source = utf8.decode(bytes, allowMalformed: true);
+      final available = RegExp(
+        r'Get new version succeed,\s*Version=([^,\s]+),\s*BuildNo=([^\s]+)',
+        caseSensitive: false,
+      ).allMatches(source).toList();
+      if (available.isNotEmpty) {
+        final match = available.last;
+        result['availableVersion'] = match.group(1)?.trim();
+        result['availableBuild'] = match.group(2)?.trim();
+      }
+      final current = RegExp(
+        r'Current(?:\s+client)?\s+version[:=]\s*([^,\s]+)(?:,?\s*Build(?:No)?[:=]\s*([^\s]+))?',
+        caseSensitive: false,
+      ).allMatches(source).toList();
+      if (current.isNotEmpty) {
+        final match = current.last;
+        result['currentVersion'] = match.group(1)?.trim();
+        result['currentBuild'] = match.group(2)?.trim();
+      }
+    } catch (error) {
+      result['readError'] = error.toString();
+    }
+    return result;
+  }
+
+  Future<Map<String, Object?>> _pathEnvironment(String gameDirectory) async {
+    final lower = gameDirectory.toLowerCase();
+    return {
+      'underProgramFiles':
+          Platform.isWindows &&
+          (lower.contains(r'\program files\') ||
+              lower.contains(r'\program files (x86)\')),
+      'pathLength': gameDirectory.length,
+      'storage': await _pathStorage(gameDirectory),
+      'directoryStat': await _describeDirectory(Directory(gameDirectory)),
+    };
+  }
+
+  Future<Map<String, Object?>> _translationRuntime(
+    String gameDirectory,
+    List<Object?> operationHistory,
+  ) async {
+    final win64 = p.join(
+      gameDirectory,
+      'Client',
+      'WindowsNoEditor',
+      'HT',
+      'Binaries',
+      'Win64',
+    );
+    final sigLog = File(p.join(win64, 'SigBypasser.log'));
+    final lastLaunch = _latestEventTime(
+      operationHistory,
+      'game_launch_started',
+    );
+    final lastDispatch = _latestEventTime(
+      operationHistory,
+      'game_launch_dispatched',
+    );
+    final logDescription = await _describeFile(sigLog);
+    String content = '';
+    if (await sigLog.exists()) {
+      try {
+        final bytes = await _readTailBytes(sigLog, _maxSigLogScanBytes);
+        content = utf8.decode(bytes, allowMalformed: true);
+      } catch (_) {}
+    }
+    final allMarkers = _sigMarkers(content);
+    final recentMarkers = _sigMarkers(content, sinceUtc: lastLaunch);
+    final lastModified = _dateFromObject(logDescription['lastModified']);
+    final changedAfterLaunch = lastLaunch == null || lastModified == null
+        ? null
+        : !lastModified.isBefore(
+            lastLaunch.subtract(const Duration(seconds: 2)),
+          );
+
+    String status;
+    if (lastLaunch == null) {
+      status = 'no_recorded_launch';
+    } else if (!await sigLog.exists()) {
+      status = 'sig_log_missing';
+    } else if (changedAfterLaunch == false) {
+      status = 'stale_after_last_launch';
+    } else if ((recentMarkers['patchApplied'] as int) > 0) {
+      status = 'patch_applied_after_last_launch';
+    } else if ((recentMarkers['loaderLoaded'] as int) > 0 &&
+        (recentMarkers['patternNotFound'] as int) > 0) {
+      status = 'loader_started_but_patch_failed_after_last_launch';
+    } else if ((recentMarkers['loaderLoaded'] as int) > 0) {
+      status = 'loader_started_after_last_launch';
+    } else if (changedAfterLaunch == true) {
+      status = 'log_changed_without_recognized_loader_event';
+    } else {
+      status = 'unknown';
+    }
+
+    return {
+      'derivedStatus': status,
+      'lastRecordedLaunchAt': lastLaunch?.toIso8601String(),
+      'lastRecordedDispatchAt': lastDispatch?.toIso8601String(),
+      'sigBypasserLog': logDescription,
+      'sigLogChangedAfterLastLaunch': changedAfterLaunch,
+      'allObservedMarkersInTail': allMarkers,
+      'markersAtOrAfterLastLaunch': recentMarkers,
+      'currentlyLoadedModules': await _loadedModuleEvidence(),
+      'loaderFiles': {
+        'versionDll': await _describeFile(
+          File(p.join(win64, 'version.dll')),
+          includeHash: true,
+        ),
+        'universalSigBypasser': await _describeFile(
+          File(p.join(win64, 'UniversalSigBypasser.asi')),
+          includeHash: true,
+        ),
+      },
+    };
+  }
+
+  Map<String, Object?> _sigMarkers(String content, {DateTime? sinceUtc}) {
+    var loaderLoaded = 0;
+    var patternFound = 0;
+    var patchApplied = 0;
+    var patternNotFound = 0;
+    String? lastRelevantLine;
+    DateTime? lastRelevantAt;
+
+    for (final rawLine in const LineSplitter().convert(content)) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      final timestamp = _sigTimestamp(line);
+      if (sinceUtc != null) {
+        if (timestamp == null ||
+            timestamp.isBefore(sinceUtc.subtract(const Duration(seconds: 5)))) {
+          continue;
+        }
+      }
+      final lower = line.toLowerCase();
+      var relevant = false;
+      if (lower.contains('universalsigbypasser loaded')) {
+        loaderLoaded++;
+        relevant = true;
+      }
+      if (lower.contains('pattern ') && lower.contains(' found')) {
+        patternFound++;
+        relevant = true;
+      }
+      if (lower.contains('patch applied')) {
+        patchApplied++;
+        relevant = true;
+      }
+      if (lower.contains('pattern not found')) {
+        patternNotFound++;
+        relevant = true;
+      }
+      if (relevant) {
+        lastRelevantLine = LauncherLog.redactSensitiveValues(line);
+        lastRelevantAt = timestamp;
+      }
+    }
+    return {
+      'loaderLoaded': loaderLoaded,
+      'patternFound': patternFound,
+      'patchApplied': patchApplied,
+      'patternNotFound': patternNotFound,
+      'lastRelevantLine': lastRelevantLine,
+      'lastRelevantAt': lastRelevantAt?.toIso8601String(),
+    };
+  }
+
+  DateTime? _sigTimestamp(String line) {
+    // UniversalSigBypasser currently emits timestamps without brackets, while
+    // older/test fixtures may use brackets. Accept both shapes. The log uses
+    // local wall-clock time, so parse it as local and normalize to UTC before
+    // comparing it with launcher events.
+    final match = RegExp(
+      r'^\[?(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?:\])?',
+    ).firstMatch(line);
+    if (match == null) return null;
+    var time = match.group(2)!;
+    final dot = time.indexOf('.');
+    if (dot >= 0 && time.length - dot - 1 > 6) {
+      time = time.substring(0, dot + 7);
+    }
+    final local = DateTime.tryParse('${match.group(1)}T$time');
+    return local?.toUtc();
+  }
+
+  Future<Map<String, Object?>> _loadedModuleEvidence() async {
+    if (!Platform.isWindows) {
+      return {'supported': false, 'reason': 'module_snapshot_is_windows_only'};
+    }
+    try {
+      final result = await Process.run('tasklist.exe', const [
+        '/FI',
+        'IMAGENAME eq HTGame.exe',
+        '/M',
+        '/FO',
+        'CSV',
+        '/NH',
+      ]).timeout(const Duration(seconds: 4));
+      final output = LauncherLog.redactSensitiveValues(
+        result.stdout.toString().trim(),
+      );
+      final error = LauncherLog.redactSensitiveValues(
+        result.stderr.toString().trim(),
+      );
+      final lower = output.toLowerCase();
+      final running = lower.contains('htgame.exe');
+      final moduleListUnavailable =
+          running &&
+          (lower.contains('"n/a"') ||
+              lower.contains(',n/a') ||
+              lower.endsWith('n/a'));
+      final moduleListAvailable = running && !moduleListUnavailable;
+      return {
+        'supported': true,
+        'queryExitCode': result.exitCode,
+        'htGameRunning': running,
+        'moduleListAvailable': running ? moduleListAvailable : null,
+        // A protected process may let tasklist see HTGame.exe while returning
+        // N/A for its module list. In that situation "false" would be a false
+        // negative, so report null/unknown instead.
+        'versionDllLoaded': !running
+            ? false
+            : moduleListAvailable
+            ? lower.contains('version.dll')
+            : null,
+        'universalSigBypasserLoaded': !running
+            ? false
+            : moduleListAvailable
+            ? lower.contains('universalsigbypasser.asi')
+            : null,
+        if (moduleListUnavailable)
+          'reason': 'tasklist_module_list_unavailable_for_running_process',
+        'raw': output.length <= 32768 ? output : output.substring(0, 32768),
+        if (error.isNotEmpty) 'stderr': error,
+      };
+    } catch (error) {
+      return {'supported': true, 'queryError': error.toString()};
+    }
+  }
+
+  Future<Map<String, Object?>> _modAndLoaderInventory(
+    String gameDirectory,
+    TranslationManifest? manifest,
+  ) async {
+    final managed = <String>{
+      if (manifest != null)
+        for (final file in manifest.files)
+          p.normalize(file.relativeDestination).toLowerCase(),
+    };
+    final win64 = Directory(
+      p.join(
+        gameDirectory,
+        'Client',
+        'WindowsNoEditor',
+        'HT',
+        'Binaries',
+        'Win64',
+      ),
+    );
+    final paks = Directory(
+      p.join(
+        gameDirectory,
+        'Client',
+        'WindowsNoEditor',
+        'HT',
+        'Content',
+        'Paks',
+      ),
+    );
+
+    final loaderCandidates = <Map<String, Object?>>[];
+    if (await win64.exists()) {
+      try {
+        await for (final entity in win64.list(followLinks: false)) {
+          if (entity is! File) continue;
+          final name = p.basename(entity.path).toLowerCase();
+          if (!name.endsWith('.asi') && !_knownProxyDlls.contains(name)) {
+            continue;
+          }
+          final relative = p.normalize(
+            p.relative(entity.path, from: gameDirectory),
+          );
+          final isManaged = managed.contains(relative.toLowerCase());
+          final commonRuntimeName = _commonRuntimeDllNames.contains(name);
+          loaderCandidates.add({
+            'relativePath': relative,
+            'managedByCurrentManifest': isManaged,
+            'commonRuntimeName': commonRuntimeName,
+            'potentialForeignLoader': !isManaged && !commonRuntimeName,
+            'candidateClassification': isManaged
+                ? 'managed_translation_file'
+                : commonRuntimeName
+                ? 'unmanaged_common_runtime_name'
+                : 'unmanaged_loader_candidate',
+            ...await _describeFile(
+              entity,
+              includeHash: true,
+              hashLimitBytes: _maxModCandidateHashBytes,
+              includePath: false,
+            ),
+          });
+          if (loaderCandidates.length >= _maxInventoryEntries) break;
+        }
+      } catch (error) {
+        loaderCandidates.add({'scanError': error.toString()});
+      }
+    }
+
+    final containerCandidates = <Map<String, Object?>>[];
+    final extensionCounts = <String, int>{};
+    var inspectedContainers = 0;
+    var truncated = false;
+    final roots = <Directory>[
+      paks,
+      Directory(p.join(paks.path, '~mods')),
+      Directory(p.join(paks.path, 'Mods')),
+      Directory(p.join(paks.path, 'LogicMods')),
+    ];
+    final seenRoots = <String>{};
+    for (final root in roots) {
+      final normalizedRoot = p.normalize(root.path).toLowerCase();
+      if (!seenRoots.add(normalizedRoot) || !await root.exists()) continue;
+      try {
+        await for (final entity in root.list(followLinks: false)) {
+          if (entity is! File) continue;
+          final extension = p.extension(entity.path).toLowerCase();
+          if (!const {'.pak', '.utoc', '.ucas', '.sig'}.contains(extension)) {
+            continue;
+          }
+          inspectedContainers++;
+          extensionCounts[extension] = (extensionCounts[extension] ?? 0) + 1;
+          final relative = p.normalize(
+            p.relative(entity.path, from: gameDirectory),
+          );
+          final lowerRelative = relative.toLowerCase();
+          final name = p.basename(entity.path).toLowerCase();
+          final isManaged = managed.contains(lowerRelative);
+          final inModDirectory =
+              normalizedRoot != p.normalize(paks.path).toLowerCase();
+          final highPriority = name.contains('_p.');
+          final nameLooksModded = RegExp(
+            r'pt.?br|portugu|trad|localiz|mod|pakchunk999',
+            caseSensitive: false,
+          ).hasMatch(name);
+          if (!isManaged &&
+              !inModDirectory &&
+              !highPriority &&
+              !nameLooksModded) {
+            continue;
+          }
+          containerCandidates.add({
+            'relativePath': relative,
+            'managedByCurrentManifest': isManaged,
+            'insideKnownModDirectory': inModDirectory,
+            'highPriorityContainer': highPriority,
+            'potentialForeignContainer': !isManaged,
+            ...await _describeFile(
+              entity,
+              includeHash: true,
+              hashLimitBytes: _maxModCandidateHashBytes,
+              includePath: false,
+            ),
+          });
+          if (containerCandidates.length >= _maxInventoryEntries) {
+            truncated = true;
+            break;
+          }
+        }
+      } catch (error) {
+        containerCandidates.add({
+          'root': LauncherLog.redactSensitiveValues(root.path),
+          'scanError': error.toString(),
+        });
+      }
+      if (truncated) break;
+    }
+
+    final modDirectories = <Map<String, Object?>>[];
+    for (final directory in roots.skip(1)) {
+      if (await directory.exists()) {
+        modDirectories.add(await _directorySummary(directory));
+      }
+    }
+
+    return {
+      'loaderCandidates': loaderCandidates,
+      'foreignLoaderCandidateCount': loaderCandidates
+          .where((entry) => entry['potentialForeignLoader'] == true)
+          .length,
+      'containerSummary': {
+        'inspected': inspectedContainers,
+        'extensionCounts': extensionCounts,
+        'candidateListTruncated': truncated,
+      },
+      'containerCandidates': containerCandidates,
+      'foreignContainerCandidateCount': containerCandidates
+          .where((entry) => entry['potentialForeignContainer'] == true)
+          .length,
+      'knownModDirectories': modDirectories,
+    };
+  }
+
+  Future<Map<String, Object?>> _languageConfiguration(
+    InstallReceipt? receipt,
+  ) async {
+    final language = receipt?.textLanguage;
+    if (language == null) {
+      return {'receiptHasTextLanguage': false};
+    }
+    final file = File(language.configPath);
+    final result = <String, Object?>{
+      'receiptHasTextLanguage': true,
+      'key': language.key,
+      'requestedCulture': language.requestedCulture,
+      'file': await _describeFile(file),
+    };
+    if (!await file.exists()) return result;
+
+    // NteHybridCulture/NteEncryptedCulture are receipt sentinels, not literal
+    // INI keys. Asking the file for "NteHybridCulture=" therefore produced a
+    // misleading keyPresent=false even on healthy installations.
+    if (language.key == 'NteHybridCulture' ||
+        language.key == 'NteEncryptedCulture') {
+      result['keyIsSynthetic'] = true;
+      result['currentState'] = await GameLanguageService().inspectReceiptState(
+        language,
+      );
+      return result;
+    }
+
+    try {
+      if (await file.length() > 2 * 1024 * 1024) {
+        result['readSkipped'] = 'file_larger_than_2_mib';
+        return result;
+      }
+      final source = await file.readAsString();
+      final match = RegExp(
+        '^${RegExp.escape(language.key)}=(.*)\$',
+        multiLine: true,
+      ).firstMatch(source);
+      final raw = match?.group(1)?.trim();
+      result['keyPresent'] = raw != null;
+      if (raw != null) {
+        result['currentRawValue'] = LauncherLog.redactSensitiveValues(raw);
+        final cultures = <String, String>{};
+        for (final entry in const [
+          'globalLanguage',
+          'globalLocale',
+          'gameLanguage',
+        ]) {
+          final culture = RegExp(
+            '"${RegExp.escape(entry)}"\\s*:\\s*"([^"]+)"',
+          ).firstMatch(raw)?.group(1);
+          if (culture != null) cultures[entry] = culture;
+        }
+        result['parsedCultures'] = cultures;
+      }
+    } catch (error) {
+      result['readError'] = error.toString();
+    }
+    return result;
   }
 
   Future<List<Map<String, Object?>>> _collectGameLogs(
@@ -367,7 +1010,7 @@ class DiagnosticService {
     });
 
     final results = <Map<String, Object?>>[];
-    for (final file in existing.take(_maxGameLogs)) {
+    for (final file in existing.take(_maxGameLogs - 3)) {
       try {
         final length = await file.length();
         final bytes = await _readTailBytes(file, _maxGameLogBytes);
@@ -387,7 +1030,83 @@ class DiagnosticService {
         });
       }
     }
+    results.addAll(await _filteredUnrealLogs());
+    return results.take(_maxGameLogs).toList(growable: false);
+  }
+
+  Future<List<Map<String, Object?>>> _filteredUnrealLogs() async {
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    if (localAppData == null || localAppData.trim().isEmpty) return const [];
+    final root = Directory(p.join(localAppData, 'HT', 'Saved_Global', 'Logs'));
+    if (!await root.exists()) return const [];
+    final files = <File>[];
+    try {
+      await for (final entity in root.list(followLinks: false)) {
+        if (entity is File && entity.path.toLowerCase().endsWith('.log')) {
+          files.add(entity);
+        }
+      }
+    } catch (_) {
+      return const [];
+    }
+    files.sort((first, second) {
+      try {
+        return second.lastModifiedSync().compareTo(first.lastModifiedSync());
+      } catch (_) {
+        return 0;
+      }
+    });
+    final relevant = RegExp(
+      r'sigbypass|pakchunk999|logpak|iostore|mount|culture|localiz|'
+      r'internationalization|version\.dll|\.asi|mod|error|warning|failed',
+      caseSensitive: false,
+    );
+    final results = <Map<String, Object?>>[];
+    for (final file in files.take(3)) {
+      try {
+        final length = await file.length();
+        final bytes = await _readTailBytes(file, _maxHtLogScanBytes);
+        final lines = utf8
+            .decode(bytes, allowMalformed: true)
+            .split('\n')
+            .where(
+              (line) =>
+                  relevant.hasMatch(line) && !_looksLikeOpaqueEncodedLine(line),
+            )
+            .take(400)
+            .map(LauncherLog.redactSensitiveValues)
+            .join('\n');
+        results.add({
+          'path': LauncherLog.redactSensitiveValues(file.path),
+          'size': length,
+          'lastModified': (await file.lastModified()).toUtc().toIso8601String(),
+          'filtered': true,
+          'filter':
+              'loader, pak/iostore, mount, culture/localization, mod, '
+              'error/warning/failure',
+          'content': lines,
+        });
+      } catch (error) {
+        results.add({
+          'path': LauncherLog.redactSensitiveValues(file.path),
+          'filtered': true,
+          'readError': error.toString(),
+        });
+      }
+    }
     return results;
+  }
+
+  bool _looksLikeOpaqueEncodedLine(String line) {
+    final value = line.trim();
+    if (value.length < 96 || value.contains(' ') || value.contains('\t')) {
+      return false;
+    }
+    // GameUserSettings/log payloads can contain long Base64 ciphertext lines.
+    // Keyword substring matching inside ciphertext produces meaningless noise
+    // (for example an accidental "mod" or "error" sequence), so suppress a
+    // line only when it strongly resembles one opaque encoded token.
+    return RegExp(r'^[A-Za-z0-9+/=_-]+$').hasMatch(value);
   }
 
   Future<List<File>> _recentCrashLogs(String gameDirectory) async {
@@ -425,23 +1144,46 @@ class DiagnosticService {
   Future<Map<String, Object?>> _describeFile(
     File file, {
     bool includeHash = false,
+    int? hashLimitBytes = 16 * 1024 * 1024,
+    bool includePath = true,
   }) async {
+    final exists = await file.exists();
     final result = <String, Object?>{
-      'path': LauncherLog.redactSensitiveValues(file.path),
-      'exists': await file.exists(),
+      if (includePath) 'path': LauncherLog.redactSensitiveValues(file.path),
+      'exists': exists,
     };
-    if (!await file.exists()) return result;
+    if (!exists) return result;
     try {
-      final size = await file.length();
+      final stat = await file.stat();
+      final size = stat.size;
       result['size'] = size;
-      result['lastModified'] = (await file.lastModified())
-          .toUtc()
-          .toIso8601String();
-      if (includeHash && size <= 16 * 1024 * 1024) {
-        result['sha256'] = sha256.convert(await file.readAsBytes()).toString();
+      result['lastModified'] = stat.modified.toUtc().toIso8601String();
+      result['lastChanged'] = stat.changed.toUtc().toIso8601String();
+      result['mode'] = stat.mode;
+      if (includeHash && (hashLimitBytes == null || size <= hashLimitBytes)) {
+        result['sha256'] = (await sha256.bind(file.openRead()).first)
+            .toString();
       } else if (includeHash) {
-        result['sha256Skipped'] = 'file_larger_than_16_mib';
+        result['sha256Skipped'] = 'file_larger_than_${hashLimitBytes}_bytes';
       }
+    } catch (error) {
+      result['metadataError'] = error.toString();
+    }
+    return result;
+  }
+
+  Future<Map<String, Object?>> _describeDirectory(Directory directory) async {
+    final exists = await directory.exists();
+    final result = <String, Object?>{
+      'path': LauncherLog.redactSensitiveValues(directory.path),
+      'exists': exists,
+    };
+    if (!exists) return result;
+    try {
+      final stat = await directory.stat();
+      result['lastModified'] = stat.modified.toUtc().toIso8601String();
+      result['lastChanged'] = stat.changed.toUtc().toIso8601String();
+      result['mode'] = stat.mode;
     } catch (error) {
       result['metadataError'] = error.toString();
     }
@@ -450,7 +1192,10 @@ class DiagnosticService {
 
   Future<Map<String, Object?>> _directorySummary(Directory directory) async {
     if (!await directory.exists()) {
-      return {'path': directory.path, 'exists': false};
+      return {
+        'path': LauncherLog.redactSensitiveValues(directory.path),
+        'exists': false,
+      };
     }
     var files = 0;
     var directories = 0;
@@ -488,8 +1233,93 @@ class DiagnosticService {
       'directories': directories,
       'bytes': bytes,
       'truncated': truncated,
-      'logRetentionMaximumBytes': log.maxBytes * (log.retainedFiles + 1),
+      'logRetentionMaximumBytes':
+          p.normalize(directory.path) == p.normalize(paths.root.path)
+          ? log.maxBytes * (log.retainedFiles + 1)
+          : null,
     };
+  }
+
+  Future<Map<String, Object?>> _collectStorageState(
+    String? gameDirectory,
+  ) async {
+    final result = <String, Object?>{
+      'cache': await _directorySummary(paths.cache),
+      'downloads': await _directorySummary(paths.downloads),
+      'legacyTransactions': await _directorySummary(paths.transactions),
+      'installations': await _directorySummary(paths.installations),
+      'diagnostics': await _directorySummary(paths.diagnostics),
+    };
+    if (gameDirectory != null) {
+      try {
+        final storage = await installer.receipts.storageFor(gameDirectory);
+        result['selectedInstallation'] = {
+          'id': storage.id,
+          'root': await _directorySummary(storage.root),
+          'originals': await _directorySummary(storage.originals),
+          'transactions': await _directorySummary(storage.transactions),
+          'receipt': await _describeFile(storage.receipt),
+          'temporaryReceipt': await _describeFile(
+            File('${storage.receipt.path}.tmp'),
+          ),
+          'previousReceipt': await _describeFile(
+            File('${storage.receipt.path}.previous'),
+          ),
+        };
+      } catch (error) {
+        result['selectedInstallationError'] = error.toString();
+      }
+    }
+    return result;
+  }
+
+  Future<List<Map<String, Object?>>> _collectManagedInstallations(
+    String? selectedGameDirectory,
+  ) async {
+    if (!await paths.installations.exists()) return const [];
+    String? selectedId;
+    if (selectedGameDirectory != null) {
+      try {
+        selectedId = (await installer.receipts.storageFor(
+          selectedGameDirectory,
+        )).id;
+      } catch (_) {}
+    }
+    final results = <Map<String, Object?>>[];
+    try {
+      await for (final entity in paths.installations.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final id = p.basename(entity.path);
+        final receiptFile = File(p.join(entity.path, 'receipt.json'));
+        final entry = <String, Object?>{
+          'storageId': id,
+          'selected': selectedId == id,
+          'root': LauncherLog.redactSensitiveValues(entity.path),
+          'receiptExists': await receiptFile.exists(),
+        };
+        if (await receiptFile.exists()) {
+          try {
+            final decoded = jsonDecode(await receiptFile.readAsString());
+            if (decoded is Map<String, dynamic>) {
+              entry['translationVersion'] = decoded['translationVersion'];
+              entry['installedAt'] = decoded['installedAt'];
+              entry['gameDirectory'] = _redactObject(decoded['gameDirectory']);
+              final files = decoded['files'];
+              entry['managedFiles'] = files is List ? files.length : null;
+            } else {
+              entry['receiptError'] = 'root_not_object';
+            }
+          } catch (error) {
+            entry['receiptError'] = error.toString();
+          }
+        }
+        results.add(entry);
+        if (results.length >= _maxManagedInstallations) break;
+      }
+    } catch (error) {
+      results.add({'scanError': error.toString()});
+    }
+    return results;
   }
 
   Future<List<Object?>> _readOperationHistory() async {
@@ -519,6 +1349,141 @@ class DiagnosticService {
     }
   }
 
+  Map<String, Object?> _analyzeBootstrapHistory(List<Object?> history) {
+    final sessions = <String, Map<String, Object?>>{};
+    final order = <String>[];
+    for (final item in history) {
+      if (item is! Map) continue;
+      final sessionId = item['sessionId']?.toString();
+      if (sessionId == null || sessionId.isEmpty) continue;
+      final event = item['event']?.toString();
+      final at = item['at']?.toString();
+      final session = sessions.putIfAbsent(sessionId, () {
+        order.add(sessionId);
+        return {
+          'sessionId': sessionId,
+          'startedAt': at,
+          'completed': false,
+          'failed': false,
+          'uncaughtErrorCount': 0,
+        };
+      });
+      session['lastEvent'] = event;
+      session['lastEventAt'] = at;
+      if (event == 'process_started') {
+        session['startedAt'] = at;
+      } else if (event == 'bootstrap_stage') {
+        final details = item['details'];
+        if (details is Map) {
+          session['lastStage'] = details['stage']?.toString();
+          session['lastStageAt'] = at;
+        }
+      } else if (event == 'bootstrap_completed') {
+        session['completed'] = true;
+        session['completedAt'] = at;
+      } else if (event == 'bootstrap_failed') {
+        session['failed'] = true;
+        session['failedAt'] = at;
+        session['failure'] = item['details'];
+      } else if (event == 'flutter_uncaught_error' ||
+          event == 'platform_uncaught_error') {
+        session['uncaughtErrorCount'] =
+            (session['uncaughtErrorCount'] as int? ?? 0) + 1;
+        session['lastUncaughtError'] = item['details'];
+        session['lastUncaughtErrorAt'] = at;
+      }
+    }
+    final recent = order.reversed
+        .take(10)
+        .map((id) => sessions[id]!)
+        .toList()
+        .reversed
+        .toList();
+    return {
+      'recentSessions': recent,
+      'incompleteBootstrapCount': recent
+          .where(
+            (session) =>
+                session['completed'] != true && session['failed'] != true,
+          )
+          .length,
+      'failedBootstrapCount': recent
+          .where((session) => session['failed'] == true)
+          .length,
+      'uncaughtErrorCount': recent.fold<int>(
+        0,
+        (total, session) =>
+            total + (session['uncaughtErrorCount'] as int? ?? 0),
+      ),
+    };
+  }
+
+  Map<String, Object?> _analyzeStartupHistory(List<Object?> history) {
+    final sessions = <Map<String, Object?>>[];
+    Map<String, Object?>? active;
+    for (final item in history) {
+      if (item is! Map) continue;
+      final event = item['event']?.toString();
+      final at = DateTime.tryParse(item['at']?.toString() ?? '')?.toUtc();
+      if (event == 'launcher_initialize_started') {
+        if (active != null) {
+          active['interruptedByNewInitialization'] = true;
+          sessions.add(active);
+        }
+        active = {'startedAt': at?.toIso8601String(), 'completed': false};
+      } else if (event == 'launcher_initialize_stage' && active != null) {
+        final details = item['details'];
+        if (details is Map) {
+          final stage = details['stage']?.toString();
+          if (stage != null && stage.isNotEmpty) {
+            active['lastStage'] = stage;
+            active['lastStageAt'] = at?.toIso8601String();
+          }
+        }
+      } else if (event == 'launcher_initialize_completed' && active != null) {
+        active['completed'] = true;
+        active['completedAt'] = at?.toIso8601String();
+        final started = DateTime.tryParse(
+          active['startedAt']?.toString() ?? '',
+        );
+        if (started != null && at != null) {
+          active['durationMs'] = at.difference(started).inMilliseconds;
+        }
+        final details = item['details'];
+        if (details is Map) {
+          active['verification'] = details['verification'];
+          active['manifestSource'] = details['manifestSource'];
+        }
+        sessions.add(active);
+        active = null;
+      }
+    }
+    if (active != null) {
+      active['completed'] = false;
+      active['stillIncompleteAtDiagnostic'] = true;
+      sessions.add(active);
+    }
+    final recent = sessions.reversed.take(10).toList().reversed.toList();
+    return {
+      'recentInitializations': recent,
+      'incompleteCount': recent
+          .where((entry) => entry['completed'] != true)
+          .length,
+      'hasRecentInterruptedInitialization': recent.any(
+        (entry) => entry['interruptedByNewInitialization'] == true,
+      ),
+      'lastHistoryEvent': history.isEmpty ? null : history.last,
+    };
+  }
+
+  DateTime? _latestEventTime(List<Object?> history, String eventName) {
+    for (final item in history.reversed) {
+      if (item is! Map || item['event']?.toString() != eventName) continue;
+      return DateTime.tryParse(item['at']?.toString() ?? '')?.toUtc();
+    }
+    return null;
+  }
+
   Future<Map<String, Object?>?> _readJsonFile(File file) async {
     if (!await file.exists()) return null;
     try {
@@ -527,7 +1492,10 @@ class DiagnosticService {
           ? Map<String, Object?>.from(decoded)
           : {'formatError': 'root_not_object'};
     } catch (error) {
-      return {'readError': error.toString(), 'path': file.path};
+      return {
+        'readError': error.toString(),
+        'path': LauncherLog.redactSensitiveValues(file.path),
+      };
     }
   }
 
@@ -536,10 +1504,15 @@ class DiagnosticService {
     for (final command in const [
       'powershell.exe',
       'reg.exe',
+      'tasklist.exe',
+      'whoami.exe',
       'steam',
       'wine',
+      'wineserver',
       'umu-run',
       'xdotool',
+      'lspci',
+      'vulkaninfo',
     ]) {
       result[command] = await _commandPath(command);
     }
@@ -589,9 +1562,268 @@ class DiagnosticService {
     }
   }
 
+  Future<Map<String, Object?>> _privilegeState() async {
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run('whoami.exe', const [
+          '/groups',
+          '/FO',
+          'CSV',
+          '/NH',
+        ]).timeout(const Duration(seconds: 3));
+        final text = result.stdout.toString();
+        String integrity = 'unknown';
+        if (text.contains('S-1-16-16384')) {
+          integrity = 'system';
+        } else if (text.contains('S-1-16-12288')) {
+          integrity = 'high';
+        } else if (text.contains('S-1-16-8192')) {
+          integrity = 'medium';
+        } else if (text.contains('S-1-16-4096')) {
+          integrity = 'low';
+        }
+        return {
+          'queryExitCode': result.exitCode,
+          'integrityLevel': integrity,
+          'elevated': integrity == 'high' || integrity == 'system',
+        };
+      } catch (error) {
+        return {'queryError': error.toString()};
+      }
+    }
+    if (Platform.isLinux) {
+      try {
+        final uid = await Process.run('id', const [
+          '-u',
+        ]).timeout(const Duration(seconds: 2));
+        final gid = await Process.run('id', const [
+          '-g',
+        ]).timeout(const Duration(seconds: 2));
+        final uidText = uid.stdout.toString().trim();
+        return {
+          'uid': int.tryParse(uidText),
+          'gid': int.tryParse(gid.stdout.toString().trim()),
+          'root': uidText == '0',
+        };
+      } catch (error) {
+        return {'queryError': error.toString()};
+      }
+    }
+    return {'supported': false};
+  }
+
+  Future<Map<String, Object?>?> _uacPolicy() async {
+    if (!Platform.isWindows) return null;
+    try {
+      final result = await Process.run('reg.exe', const [
+        'query',
+        r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System',
+      ]).timeout(const Duration(seconds: 3));
+      if (result.exitCode != 0) {
+        return {
+          'queryExitCode': result.exitCode,
+          'stderr': LauncherLog.redactSensitiveValues(
+            result.stderr.toString().trim(),
+          ),
+        };
+      }
+      final text = result.stdout.toString();
+      int? value(String name) {
+        final match = RegExp(
+          '${RegExp.escape(name)}\\s+REG_DWORD\\s+0x([0-9a-fA-F]+)',
+        ).firstMatch(text);
+        return match == null ? null : int.tryParse(match.group(1)!, radix: 16);
+      }
+
+      return {
+        'enableLUA': value('EnableLUA'),
+        'consentPromptBehaviorAdmin': value('ConsentPromptBehaviorAdmin'),
+        'promptOnSecureDesktop': value('PromptOnSecureDesktop'),
+        'filterAdministratorToken': value('FilterAdministratorToken'),
+      };
+    } catch (error) {
+      return {'queryError': error.toString()};
+    }
+  }
+
+  Future<Map<String, Object?>?> _systemResources() async {
+    if (Platform.isLinux) {
+      final file = File('/proc/meminfo');
+      if (!await file.exists()) return null;
+      try {
+        final values = <String, int>{};
+        for (final line in await file.readAsLines()) {
+          final match = RegExp(
+            r'^(MemTotal|MemAvailable):\s+(\d+)\s+kB',
+          ).firstMatch(line);
+          if (match != null) {
+            values[match.group(1)!] = int.parse(match.group(2)!) * 1024;
+          }
+        }
+        return {
+          'totalPhysicalMemoryBytes': values['MemTotal'],
+          'availablePhysicalMemoryBytes': values['MemAvailable'],
+        };
+      } catch (error) {
+        return {'queryError': error.toString()};
+      }
+    }
+    if (Platform.isWindows) {
+      final decoded = await _powershellJson(
+        r'Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize,FreePhysicalMemory | ConvertTo-Json -Compress',
+      );
+      if (decoded is Map) {
+        int? kib(String key) {
+          final raw = decoded[key];
+          final value = raw is num ? raw.toInt() : int.tryParse('$raw');
+          return value == null ? null : value * 1024;
+        }
+
+        return {
+          'totalPhysicalMemoryBytes': kib('TotalVisibleMemorySize'),
+          'availablePhysicalMemoryBytes': kib('FreePhysicalMemory'),
+        };
+      }
+      return decoded == null ? null : {'raw': decoded};
+    }
+    return null;
+  }
+
+  Future<Object?> _graphicsInfo() async {
+    if (Platform.isWindows) {
+      return _powershellJson(
+        r'Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,AdapterRAM | ConvertTo-Json -Compress',
+      );
+    }
+    if (Platform.isLinux) {
+      try {
+        final result = await Process.run('sh', const [
+          '-lc',
+          "if command -v lspci >/dev/null 2>&1; then lspci -nn | grep -Ei 'vga|3d|display' | head -n 8; fi",
+        ]).timeout(const Duration(seconds: 3));
+        final output = LauncherLog.redactSensitiveValues(
+          result.stdout.toString().trim(),
+        );
+        String? vulkan;
+        try {
+          final vk = await Process.run('sh', const [
+            '-lc',
+            'if command -v vulkaninfo >/dev/null 2>&1; then vulkaninfo --summary 2>/dev/null | head -n 120; fi',
+          ]).timeout(const Duration(seconds: 4));
+          final text = LauncherLog.redactSensitiveValues(
+            vk.stdout.toString().trim(),
+          );
+          if (text.isNotEmpty) vulkan = text;
+        } catch (_) {}
+        return {
+          'displayControllers': output.isEmpty ? null : output,
+          'vulkanSummary': vulkan,
+        };
+      } catch (error) {
+        return {'queryError': error.toString()};
+      }
+    }
+    return null;
+  }
+
+  Future<Object?> _securityProducts() async {
+    if (!Platform.isWindows || RuntimeEnvironment.isWine) return null;
+    return _powershellJson(
+      r'Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | Select-Object displayName,productState | ConvertTo-Json -Compress',
+    );
+  }
+
+  Future<Object?> _powershellJson(String command) async {
+    if (!Platform.isWindows) return null;
+    try {
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        command,
+      ]).timeout(const Duration(seconds: 5));
+      if (result.exitCode != 0) {
+        return {
+          'queryExitCode': result.exitCode,
+          'stderr': LauncherLog.redactSensitiveValues(
+            result.stderr.toString().trim(),
+          ),
+        };
+      }
+      final output = result.stdout.toString().trim();
+      if (output.isEmpty) return null;
+      try {
+        return _redactObject(jsonDecode(output));
+      } catch (_) {
+        return LauncherLog.redactSensitiveValues(output);
+      }
+    } catch (error) {
+      return {'queryError': error.toString()};
+    }
+  }
+
+  Future<Map<String, Object?>?> _pathStorage(String path) async {
+    if (Platform.isLinux) {
+      try {
+        final result = await Process.run('df', [
+          '-PT',
+          '--',
+          path,
+        ]).timeout(const Duration(seconds: 3));
+        if (result.exitCode != 0) {
+          return {
+            'queryExitCode': result.exitCode,
+            'stderr': LauncherLog.redactSensitiveValues(
+              result.stderr.toString().trim(),
+            ),
+          };
+        }
+        final lines = result.stdout
+            .toString()
+            .trim()
+            .split('\n')
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
+        if (lines.length < 2) return null;
+        final parts = lines.last.trim().split(RegExp(r'\s+'));
+        return {
+          'filesystem': parts.isNotEmpty ? parts[0] : null,
+          'type': parts.length > 1 ? parts[1] : null,
+          'blocks1024': parts.length > 2 ? int.tryParse(parts[2]) : null,
+          'used1024': parts.length > 3 ? int.tryParse(parts[3]) : null,
+          'available1024': parts.length > 4 ? int.tryParse(parts[4]) : null,
+          'capacity': parts.length > 5 ? parts[5] : null,
+          'mountPoint': parts.length > 6
+              ? LauncherLog.redactSensitiveValues(parts.sublist(6).join(' '))
+              : null,
+        };
+      } catch (error) {
+        return {'queryError': error.toString()};
+      }
+    }
+    if (Platform.isWindows) {
+      final match = RegExp(r'^([A-Za-z]):').firstMatch(path);
+      if (match == null) return null;
+      final drive = match.group(1)!;
+      final result = await _powershellJson(
+        "Get-Volume -DriveLetter '$drive' | Select-Object DriveLetter,FileSystem,FileSystemLabel,HealthStatus,Size,SizeRemaining | ConvertTo-Json -Compress",
+      );
+      return result is Map
+          ? Map<String, Object?>.from(
+              result.map((key, value) => MapEntry(key.toString(), value)),
+            )
+          : {'raw': result};
+    }
+    return null;
+  }
+
   Future<Map<String, String>?> _linuxDistribution() async {
-    if (!Platform.isLinux) return null;
-    final file = File('/etc/os-release');
+    final file = Platform.isLinux
+        ? File('/etc/os-release')
+        : Platform.isWindows && RuntimeEnvironment.isWine
+        ? File(r'Z:\etc\os-release')
+        : null;
+    if (file == null) return null;
     if (!await file.exists()) return null;
     try {
       final values = <String, String>{};
@@ -644,6 +1876,10 @@ class DiagnosticService {
     }
     if (value is Iterable) return value.map(_redactObject).toList();
     return value;
+  }
+
+  static DateTime? _dateFromObject(Object? value) {
+    return value is String ? DateTime.tryParse(value)?.toUtc() : null;
   }
 
   static bool? _equalOptional(String? expected, String? installed) {

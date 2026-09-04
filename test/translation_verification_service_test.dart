@@ -185,10 +185,14 @@ void main() {
       expect(result.receiptVersion, manifest.translationVersion);
       expect(recovered?.files, hasLength(1));
       expect(
-        recovered?.files.single.relativePath,
-        manifest.files.first.relativeDestination,
+        p.posix.normalize(
+          recovered!.files.single.relativePath.replaceAll('\\', '/'),
+        ),
+        p.posix.normalize(
+          manifest.files.first.relativeDestination.replaceAll('\\', '/'),
+        ),
       );
-      expect(recovered?.files.single.originalExisted, isFalse);
+      expect(recovered.files.single.originalExisted, isFalse);
     },
   );
 
