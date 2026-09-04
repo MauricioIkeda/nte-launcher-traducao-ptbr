@@ -170,7 +170,7 @@ class DiagnosticService {
 
     final temporary = File('${paths.diagnosticFile.path}.tmp');
     await temporary.writeAsString(
-      '${const JsonEncoder.withIndent('  ').convert(payload)}\n',
+      '${const JsonEncoder.withIndent('  ').convert(_redactObject(payload))}\n',
       flush: true,
     );
     if (await paths.diagnosticFile.exists()) {
