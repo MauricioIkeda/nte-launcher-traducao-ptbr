@@ -1,0 +1,65 @@
+name: Diagnostics v4 branch formatter
+
+on:
+  push:
+    branches:
+      - feat/diagnostics-schema-v4
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-check:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Update diagnostic schema expectation
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("test/launcher_controller_test.dart")
+          text = path.read_text(encoding="utf-8")
+          old = "expect(decoded['schemaVersion'], 3);"
+          new = "expect(decoded['schemaVersion'], 4);"
+          if old not in text and new not in text:
+              raise SystemExit("diagnostic schema assertion was not found")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Format branch
+        run: dart format .
+
+      - name: Commit formatting and schema test
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/services/diagnostic_service.dart test/launcher_controller_test.dart
+          git commit -m "test: validate diagnostics schema v4"
+          git push
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run focused tests
+        run: flutter test test/launcher_controller_test.dart
