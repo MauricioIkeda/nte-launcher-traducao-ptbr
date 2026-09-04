@@ -129,7 +129,8 @@ class LauncherLog {
     );
     result = result.replaceAllMapped(
       RegExp(
-        r'(?m)^([^\r\n]*\[CHDGamePlayerMgr::setRoleInfo\])[^\r\n]*$',
+        r'^([^\r\n]*\[CHDGamePlayerMgr::setRoleInfo\])[^\r\n]*$',
+        multiLine: true,
       ),
       (match) => '${match.group(1)} [REDACTED_PLAYER_INFO]',
     );
