@@ -12,6 +12,9 @@ constexpr wchar_t kFileName[] = L"nte-translation-launcher-window.jsonl";
 
 bool g_initialized = false;
 bool g_wine_detected = false;
+bool g_wayland_requested_by_environment = false;
+bool g_wayland_display_present = false;
+bool g_x11_display_present = false;
 int g_show_command = 0;
 std::string g_wine_version;
 std::string g_session_id;
@@ -73,6 +76,26 @@ std::wstring ResolveFilePath() {
     return kFileName;
   }
   return std::wstring(temp_path, length) + kFileName;
+}
+
+bool EnvironmentVariablePresent(const wchar_t* name) {
+  return name != nullptr && ::GetEnvironmentVariableW(name, nullptr, 0) > 0;
+}
+
+bool EnvironmentVariableEnabled(const wchar_t* name) {
+  if (name == nullptr) {
+    return false;
+  }
+  wchar_t value[32]{};
+  const DWORD length = ::GetEnvironmentVariableW(name, value, 32);
+  if (length == 0 || length >= 32) {
+    return false;
+  }
+  const std::wstring text(value, length);
+  return text != L"0" && text != L"false" && text != L"FALSE" &&
+         text != L"False" && text != L"off" && text != L"OFF" &&
+         text != L"Off" && text != L"no" && text != L"NO" &&
+         text != L"No";
 }
 
 void DetectWine() {
@@ -167,6 +190,11 @@ void Initialize(int show_command) {
   g_show_command = show_command;
   g_file_path = ResolveFilePath();
   DetectWine();
+  g_wayland_requested_by_environment =
+      EnvironmentVariableEnabled(L"PROTON_ENABLE_WAYLAND") ||
+      EnvironmentVariableEnabled(L"PROTON_USE_WAYLAND");
+  g_wayland_display_present = EnvironmentVariablePresent(L"WAYLAND_DISPLAY");
+  g_x11_display_present = EnvironmentVariablePresent(L"DISPLAY");
 
   SYSTEMTIME time{};
   ::GetSystemTime(&time);
@@ -188,6 +216,11 @@ void Record(const char* event, HWND top_level, HWND child) {
     return;
   }
 
+  const bool wine_wayland_driver_loaded =
+      ::GetModuleHandleW(L"winewayland.drv") != nullptr;
+  const bool wine_x11_driver_loaded =
+      ::GetModuleHandleW(L"winex11.drv") != nullptr;
+
   std::ostringstream out;
   out << "{"
       << "\"at\":\"" << UtcNow() << "\""
@@ -203,6 +236,16 @@ void Record(const char* event, HWND top_level, HWND child) {
   } else {
     out << "\"" << JsonEscape(g_wine_version) << "\"";
   }
+  out << ",\"wineWindowDriver\":{"
+      << "\"waylandLoaded\":"
+      << (wine_wayland_driver_loaded ? "true" : "false")
+      << ",\"x11Loaded\":" << (wine_x11_driver_loaded ? "true" : "false")
+      << ",\"waylandRequestedByEnvironment\":"
+      << (g_wayland_requested_by_environment ? "true" : "false")
+      << ",\"waylandDisplayPresent\":"
+      << (g_wayland_display_present ? "true" : "false")
+      << ",\"x11DisplayPresent\":"
+      << (g_x11_display_present ? "true" : "false") << "}";
   out << ",";
   AppendWindowState(out, "topLevel", top_level);
   out << ",";
