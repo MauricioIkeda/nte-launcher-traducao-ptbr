@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.5",
-  "publishedAt": "2026-09-02T02:04:45Z",
+  "version": "1.4.6",
+  "publishedAt": "2026-09-04T04:40:07Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.5/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19559189,
-    "sha256": "62f60b9ddb5a039942e137d8b547542e3f0401e395d25a9ef3a55070eb8ae3d1"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.6/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19601672,
+    "sha256": "44e2ac10557bd7ea2842ea6234545804e1af4958cb04549dc77daaf160252266"
   },
-  "releaseNotes": "Hotfix 1.4.5: recupera instalações parciais ou órfãs da tradução sem recibo, preserva backups originais e restaura reparo e remoção seguros.",
+  "releaseNotes": "Diagnóstico V4 com telemetria ampliada para suporte, evidências de runtime e Wine/Proton, além de reforços de privacidade.",
   "mandatory": false
 }
