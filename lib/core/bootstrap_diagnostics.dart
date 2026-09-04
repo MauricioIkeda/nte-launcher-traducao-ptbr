@@ -74,6 +74,47 @@ class BootstrapDiagnostics {
     }
   }
 
+  static Future<File> exportStandalone(File destination) async {
+    final createdAt = DateTime.now().toUtc();
+    final history = await readRecent();
+    final payload = <String, Object?>{
+      'schemaVersion': 1,
+      'reportType': 'bootstrap-diagnostic',
+      'createdAt': createdAt.toIso8601String(),
+      'currentSessionId': sessionId,
+      'privacy': {
+        'description':
+            'Diagnóstico mínimo de inicialização. Contém somente contexto '
+            'técnico do launcher e eventos sanitizados da caixa-preta de '
+            'bootstrap.',
+        'redactionApplied': true,
+      },
+      'runtime': {
+        'operatingSystem': Platform.operatingSystem,
+        'operatingSystemVersion': LauncherLog.redactSensitiveValues(
+          Platform.operatingSystemVersion,
+        ),
+        'locale': Platform.localeName,
+        'numberOfProcessors': Platform.numberOfProcessors,
+        'resolvedExecutable': LauncherLog.redactSensitiveValues(
+          Platform.resolvedExecutable,
+        ),
+        'processId': pid,
+      },
+      'bootstrapHistory': history,
+    };
+    await destination.parent.create(recursive: true);
+    await destination.writeAsString(
+      '${const JsonEncoder.withIndent('  ').convert(payload)}\n',
+      flush: true,
+    );
+    recordSync(
+      'bootstrap_standalone_diagnostic_exported',
+      details: {'destination': destination.path},
+    );
+    return destination;
+  }
+
   static void _rotateIfNeededSync(File file) {
     if (!file.existsSync() || file.lengthSync() <= _maximumBytes) return;
     try {
