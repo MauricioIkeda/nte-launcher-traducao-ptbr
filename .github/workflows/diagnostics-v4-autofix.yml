@@ -27,17 +27,234 @@ jobs:
           flutter-version: "3.44.8"
           cache: true
 
-      - name: Update diagnostic schema expectation
+      - name: Refine diagnostics v4
         shell: python
         run: |
           from pathlib import Path
-          path = Path("test/launcher_controller_test.dart")
-          text = path.read_text(encoding="utf-8")
-          old = "expect(decoded['schemaVersion'], 3);"
-          new = "expect(decoded['schemaVersion'], 4);"
-          if old not in text and new not in text:
-              raise SystemExit("diagnostic schema assertion was not found")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+
+          def replace_once(text, old, new, label):
+              if new in text:
+                  return text
+              if old not in text:
+                  raise SystemExit(f"anchor not found: {label}")
+              return text.replace(old, new, 1)
+
+          controller_path = Path("lib/launcher_controller.dart")
+          controller = controller_path.read_text(encoding="utf-8")
+          controller = replace_once(
+              controller,
+              "    try:\n",
+              "    try:\n"
+              "      await diagnostics.record(\n"
+              "        'launcher_initialize_stage',\n"
+              "        details: {'stage': 'settings'},\n"
+              "      );\n",
+              "settings stage",
+          )
+          controller = replace_once(
+              controller,
+              "      await settings.setOfficialAutoplay(false);\n"
+              "      final savedResolution = savedGameDirectory == null",
+              "      await settings.setOfficialAutoplay(false);\n"
+              "      await diagnostics.record(\n"
+              "        'launcher_initialize_stage',\n"
+              "        details: {'stage': 'game_directory_resolution'},\n"
+              "      );\n"
+              "      final savedResolution = savedGameDirectory == null",
+              "directory stage",
+          )
+          controller = replace_once(
+              controller,
+              "      if (!_isCurrent(operation)) {\n"
+              "        return;\n"
+              "      }\n"
+              "      if (gameDirectory != null) {\n"
+              "        await _detectGamePlatform(operation);\n"
+              "      }\n\n"
+              "      status = LauncherStatus.loadingManifest;",
+              "      if (!_isCurrent(operation)) {\n"
+              "        return;\n"
+              "      }\n"
+              "      if (gameDirectory != null) {\n"
+              "        await diagnostics.record(\n"
+              "          'launcher_initialize_stage',\n"
+              "          details: {'stage': 'platform_detection'},\n"
+              "        );\n"
+              "        await _detectGamePlatform(operation);\n"
+              "      }\n\n"
+              "      await diagnostics.record(\n"
+              "        'launcher_initialize_stage',\n"
+              "        details: {'stage': 'manifest_load'},\n"
+              "      );\n"
+              "      status = LauncherStatus.loadingManifest;",
+              "platform and manifest stages",
+          )
+          controller = replace_once(
+              controller,
+              "      totalBytes = manifest?.totalBytes ?? 0;\n"
+              "      if (loadedManifest != null && gameDirectory != null) {",
+              "      totalBytes = manifest?.totalBytes ?? 0;\n"
+              "      await diagnostics.record(\n"
+              "        'launcher_initialize_stage',\n"
+              "        details: {'stage': 'translation_recovery'},\n"
+              "      );\n"
+              "      if (loadedManifest != null && gameDirectory != null) {",
+              "recovery stage",
+          )
+          controller = replace_once(
+              controller,
+              "        } else {\n"
+              "          await migration.migrateWhenProvable(",
+              "        } else {\n"
+              "          await diagnostics.record(\n"
+              "            'launcher_initialize_stage',\n"
+              "            details: {'stage': 'legacy_migration'},\n"
+              "          );\n"
+              "          await migration.migrateWhenProvable(",
+              "migration stage",
+          )
+          controller = replace_once(
+              controller,
+              "          await _verifyCurrent(operation);\n"
+              "        }\n"
+              "      } else {",
+              "          await diagnostics.record(\n"
+              "            'launcher_initialize_stage',\n"
+              "            details: {'stage': 'translation_verification'},\n"
+              "          );\n"
+              "          await _verifyCurrent(operation);\n"
+              "        }\n"
+              "      } else {",
+              "verification stage",
+          )
+          controller = replace_once(
+              controller,
+              "      await checkLauncherUpdates();\n"
+              "      if (!_isCurrent(operation)) {",
+              "      await diagnostics.record(\n"
+              "        'launcher_initialize_stage',\n"
+              "        details: {'stage': 'launcher_update_check'},\n"
+              "      );\n"
+              "      await checkLauncherUpdates();\n"
+              "      if (!_isCurrent(operation)) {",
+              "update check stage",
+          )
+          controller = replace_once(
+              controller,
+              "      status = LauncherStatus.ready;\n"
+              "      await log.info(\n"
+              "        'Launcher inicializado; estado da tradução: '",
+              "      await diagnostics.record(\n"
+              "        'launcher_initialize_stage',\n"
+              "        details: {'stage': 'finalizing'},\n"
+              "      );\n"
+              "      status = LauncherStatus.ready;\n"
+              "      await log.info(\n"
+              "        'Launcher inicializado; estado da tradução: '",
+              "final stage",
+          )
+          controller_path.write_text(controller, encoding="utf-8")
+
+          diagnostic_path = Path("lib/services/diagnostic_service.dart")
+          diagnostic = diagnostic_path.read_text(encoding="utf-8")
+          diagnostic = replace_once(
+              diagnostic,
+              "      'uacPolicy': await _uacPolicy(),\n"
+              "      'systemResources': await _systemResources(),",
+              "      'uacPolicy': await _uacPolicy(),\n"
+              "      'processMitigation': await _processMitigation(),\n"
+              "      'systemResources': await _systemResources(),",
+              "process mitigation field",
+          )
+          diagnostic = replace_once(
+              diagnostic,
+              "      'sourceIdentityComparison': {",
+              "      'actualGameBuildEvidence': await _officialLauncherBuildEvidence(\n"
+              "        normalizedDirectory,\n"
+              "      ),\n"
+              "      'sourceIdentityComparison': {",
+              "actual build evidence field",
+          )
+          diagnostic = replace_once(
+              diagnostic,
+              "    for (final file in existing.take(_maxGameLogs)) {",
+              "    for (final file in existing.take(_maxGameLogs - 3)) {",
+              "reserve filtered game logs",
+          )
+          diagnostic = replace_once(
+              diagnostic,
+              "      } else if (event == 'launcher_initialize_completed' &&\n"
+              "          active != null) {",
+              "      } else if (event == 'launcher_initialize_stage' &&\n"
+              "          active != null) {\n"
+              "        final details = item['details'];\n"
+              "        if (details is Map) {\n"
+              "          final stage = details['stage']?.toString();\n"
+              "          if (stage != null && stage.isNotEmpty) {\n"
+              "            active['lastStage'] = stage;\n"
+              "            active['lastStageAt'] = at?.toIso8601String();\n"
+              "          }\n"
+              "        }\n"
+              "      } else if (event == 'launcher_initialize_completed' &&\n"
+              "          active != null) {",
+              "startup stage analyzer",
+          )
+          diagnostic = replace_once(
+              diagnostic,
+              "  Future<Map<String, Object?>?> _systemResources() async {",
+              "  Future<Object?> _processMitigation() async {\n"
+              "    if (!Platform.isWindows || RuntimeEnvironment.isWine) return null;\n"
+              "    return _powershellJson(\n"
+              "      r\"Get-ProcessMitigation -Name HTGame.exe -ErrorAction Stop | Select-Object DEP,ASLR,CFG,ImageLoad,Signature | ConvertTo-Json -Depth 6 -Compress\",\n"
+              "    );\n"
+              "  }\n\n"
+              "  Future<Map<String, Object?>?> _systemResources() async {",
+              "process mitigation method",
+          )
+          diagnostic = replace_once(
+              diagnostic,
+              "  Future<Map<String, String>?> _linuxDistribution() async {\n"
+              "    if (!Platform.isLinux) return null;\n"
+              "    final file = File('/etc/os-release');",
+              "  Future<Map<String, String>?> _linuxDistribution() async {\n"
+              "    final file = Platform.isLinux\n"
+              "        ? File('/etc/os-release')\n"
+              "        : Platform.isWindows && RuntimeEnvironment.isWine\n"
+              "        ? File(r'Z:\\\\etc\\\\os-release')\n"
+              "        : null;\n"
+              "    if (file == null) return null;",
+              "wine host distro",
+          )
+
+          build_method_anchor = "  Future<Map<String, Object?>> _pathEnvironment(String gameDirectory) async {"
+          build_method = """  Future<Map<String, Object?>?> _officialLauncherBuildEvidence(\n    String gameDirectory,\n  ) async {\n    final candidates = <File>[\n      File(\n        p.join(\n          gameDirectory,\n          'NTEGlobal',\n          'UserData',\n          'Log',\n          'NTEGlobalGame.log',\n        ),\n      ),\n      File(\n        p.join(\n          gameDirectory,\n          'NTE Global',\n          'UserData',\n          'Log',\n          'NTEGlobalGame.log',\n        ),\n      ),\n    ];\n    for (final file in candidates) {\n      if (!await file.exists()) continue;\n      try {\n        final bytes = await _readTailBytes(file, _maxHtLogScanBytes);\n        final source = utf8.decode(bytes, allowMalformed: true);\n        final matches = RegExp(\n          r'Current version:\\s*([^\\s(]+)\\s*\\(build:([^\\)]+)\\)',\n          caseSensitive: false,\n        ).allMatches(source).toList();\n        if (matches.isEmpty) continue;\n        final match = matches.last;\n        return {\n          'source': LauncherLog.redactSensitiveValues(file.path),\n          'version': match.group(1)?.trim(),\n          'build': match.group(2)?.trim(),\n          'logLastModified': (await file.lastModified())\n              .toUtc()\n              .toIso8601String(),\n        };\n      } catch (error) {\n        return {\n          'source': LauncherLog.redactSensitiveValues(file.path),\n          'readError': error.toString(),\n        };\n      }\n    }\n    return null;\n  }\n\n"""
+          diagnostic = replace_once(
+              diagnostic,
+              build_method_anchor,
+              build_method + build_method_anchor,
+              "actual build evidence method",
+          )
+          diagnostic_path.write_text(diagnostic, encoding="utf-8")
+
+          test_path = Path("test/launcher_controller_test.dart")
+          test = test_path.read_text(encoding="utf-8")
+          test = test.replace(
+              "expect(decoded['schemaVersion'], 3);",
+              "expect(decoded['schemaVersion'], 4);",
+          )
+          test = replace_once(
+              test,
+              "    expect(decoded['runtime'], isA<Map<String, dynamic>>());\n"
+              "    expect(decoded['operationHistory'], isA<List<dynamic>>());",
+              "    expect(decoded['runtime'], isA<Map<String, dynamic>>());\n"
+              "    expect(decoded['diagnosticCapabilities']['fullGameClientSha256'], isTrue);\n"
+              "    expect(decoded['startupHealth'], isA<Map<String, dynamic>>());\n"
+              "    expect(decoded['game']['translationRuntime'], isA<Map<String, dynamic>>());\n"
+              "    expect(decoded['game']['modAndLoaderInventory'], isA<Map<String, dynamic>>());\n"
+              "    expect(decoded['operationHistory'], isA<List<dynamic>>());",
+              "schema v4 assertions",
+          )
+          test_path.write_text(test, encoding="utf-8")
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -45,17 +262,17 @@ jobs:
       - name: Format branch
         run: dart format .
 
-      - name: Commit formatting and schema test
+      - name: Commit refinements
         shell: bash
         run: |
           if git diff --quiet; then
-            echo "No formatting changes."
+            echo "No changes."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/services/diagnostic_service.dart test/launcher_controller_test.dart
-          git commit -m "test: validate diagnostics schema v4"
+          git add lib/services/diagnostic_service.dart lib/launcher_controller.dart test/launcher_controller_test.dart
+          git commit -m "feat: add startup and runtime diagnostic evidence"
           git push
 
       - name: Analyze
