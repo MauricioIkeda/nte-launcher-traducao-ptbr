@@ -1,0 +1,104 @@
+name: Publish launcher 1.4.7 direct
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: "${{ github.event.head_commit.message == 'chore: publish launcher 1.4.7 direct' }}"
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: "1.4.7"
+      RELEASE_SOURCE_SHA: "96cd506d943e7410eca4425afd8b0252cf6cb22e"
+      RELEASE_NOTES: "Melhora a compatibilidade da janela sob Wine/Proton e amplia o diagnóstico de inicialização no Linux."
+
+    steps:
+      - name: Check out validated release source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.RELEASE_SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Validate and build
+        shell: pwsh
+        run: |
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw "flutter pub get failed." }
+          flutter analyze
+          if ($LASTEXITCODE -ne 0) { throw "flutter analyze failed." }
+          flutter test
+          if ($LASTEXITCODE -ne 0) { throw "flutter test failed." }
+          flutter test integration_test
+          if ($LASTEXITCODE -ne 0) { throw "integration tests failed." }
+          flutter build windows --release --build-name "$env:RELEASE_VERSION" --build-number "27"
+          if ($LASTEXITCODE -ne 0) { throw "Windows release build failed." }
+
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.1 --no-progress --yes
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$env:RELEASE_VERSION" `
+            "installer\NTE-Launcher-Traducao-PTBR.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed." }
+
+      - name: Generate launcher manifest
+        shell: pwsh
+        run: |
+          $publishedAt = (Get-Date).ToUniversalTime().ToString("o")
+          python tool\generate_launcher_manifest.py `
+            --version "$env:RELEASE_VERSION" `
+            --installer "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe" `
+            --repository "${{ github.repository }}" `
+            --output "assets\manifest\launcher_manifest.json" `
+            --published-at $publishedAt `
+            --release-notes $env:RELEASE_NOTES
+          if ($LASTEXITCODE -ne 0) { throw "Launcher manifest generation failed." }
+          Copy-Item "assets\manifest\launcher_manifest.json" `
+            (Join-Path $env:RUNNER_TEMP "launcher_manifest.json") -Force
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:RELEASE_VERSION"
+          gh release create $tag `
+            "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe" `
+            --repo "${{ github.repository }}" `
+            --target "$env:RELEASE_SOURCE_SHA" `
+            --title "NTE Launcher Tradução PT-BR $tag" `
+            --notes $env:RELEASE_NOTES
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release publication failed." }
+
+      - name: Update static launcher manifest on main
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          Copy-Item (Join-Path $env:RUNNER_TEMP "launcher_manifest.json") `
+            "assets\manifest\launcher_manifest.json" -Force
+          git add assets/manifest/launcher_manifest.json
+          if (git diff --cached --quiet) {
+            Write-Host "Launcher manifest already up to date."
+            exit 0
+          }
+          git commit -m "chore: publish launcher 1.4.7"
+          git push origin HEAD:main
