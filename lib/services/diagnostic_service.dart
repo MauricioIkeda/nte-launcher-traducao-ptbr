@@ -11,6 +11,7 @@ import '../core/launcher_log.dart';
 import '../core/runtime_environment.dart';
 import '../models/install_receipt.dart';
 import '../models/translation_manifest.dart';
+import 'game_language_service.dart';
 import 'game_platform_service.dart';
 import 'installation_service.dart';
 
@@ -41,6 +42,15 @@ class DiagnosticService {
     'dxgi.dll',
     'd3d11.dll',
     'd3d12.dll',
+  };
+
+  // Some filenames that can act as proxy loaders are also legitimate
+  // runtime dependencies shipped by games. Keep them visible in the
+  // inventory, but do not accuse them of being foreign mods based on the
+  // filename alone.
+  static const _commonRuntimeDllNames = <String>{
+    'xinput1_3.dll',
+    'xinput9_1_0.dll',
   };
 
   final AppPaths paths;
@@ -648,11 +658,20 @@ class DiagnosticService {
   }
 
   DateTime? _sigTimestamp(String line) {
+    // UniversalSigBypasser currently emits timestamps without brackets, while
+    // older/test fixtures may use brackets. Accept both shapes. The log uses
+    // local wall-clock time, so parse it as local and normalize to UTC before
+    // comparing it with launcher events.
     final match = RegExp(
-      r'^\[(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]',
+      r'^\[?(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?:\])?',
     ).firstMatch(line);
     if (match == null) return null;
-    final local = DateTime.tryParse('${match.group(1)}T${match.group(2)}');
+    var time = match.group(2)!;
+    final dot = time.indexOf('.');
+    if (dot >= 0 && time.length - dot - 1 > 6) {
+      time = time.substring(0, dot + 7);
+    }
+    final local = DateTime.tryParse('${match.group(1)}T$time');
     return local?.toUtc();
   }
 
@@ -677,13 +696,32 @@ class DiagnosticService {
       );
       final lower = output.toLowerCase();
       final running = lower.contains('htgame.exe');
+      final moduleListUnavailable =
+          running &&
+          (lower.contains('"n/a"') ||
+              lower.contains(',n/a') ||
+              lower.endsWith('n/a'));
+      final moduleListAvailable = running && !moduleListUnavailable;
       return {
         'supported': true,
         'queryExitCode': result.exitCode,
         'htGameRunning': running,
-        'versionDllLoaded': running && lower.contains('version.dll'),
-        'universalSigBypasserLoaded':
-            running && lower.contains('universalsigbypasser.asi'),
+        'moduleListAvailable': running ? moduleListAvailable : null,
+        // A protected process may let tasklist see HTGame.exe while returning
+        // N/A for its module list. In that situation "false" would be a false
+        // negative, so report null/unknown instead.
+        'versionDllLoaded': !running
+            ? false
+            : moduleListAvailable
+            ? lower.contains('version.dll')
+            : null,
+        'universalSigBypasserLoaded': !running
+            ? false
+            : moduleListAvailable
+            ? lower.contains('universalsigbypasser.asi')
+            : null,
+        if (moduleListUnavailable)
+          'reason': 'tasklist_module_list_unavailable_for_running_process',
         'raw': output.length <= 32768 ? output : output.substring(0, 32768),
         if (error.isNotEmpty) 'stderr': error,
       };
@@ -735,10 +773,17 @@ class DiagnosticService {
             p.relative(entity.path, from: gameDirectory),
           );
           final isManaged = managed.contains(relative.toLowerCase());
+          final commonRuntimeName = _commonRuntimeDllNames.contains(name);
           loaderCandidates.add({
             'relativePath': relative,
             'managedByCurrentManifest': isManaged,
-            'potentialForeignLoader': !isManaged,
+            'commonRuntimeName': commonRuntimeName,
+            'potentialForeignLoader': !isManaged && !commonRuntimeName,
+            'candidateClassification': isManaged
+                ? 'managed_translation_file'
+                : commonRuntimeName
+                ? 'unmanaged_common_runtime_name'
+                : 'unmanaged_loader_candidate',
             ...await _describeFile(
               entity,
               includeHash: true,
@@ -862,6 +907,19 @@ class DiagnosticService {
       'file': await _describeFile(file),
     };
     if (!await file.exists()) return result;
+
+    // NteHybridCulture/NteEncryptedCulture are receipt sentinels, not literal
+    // INI keys. Asking the file for "NteHybridCulture=" therefore produced a
+    // misleading keyPresent=false even on healthy installations.
+    if (language.key == 'NteHybridCulture' ||
+        language.key == 'NteEncryptedCulture') {
+      result['keyIsSynthetic'] = true;
+      result['currentState'] = await GameLanguageService().inspectReceiptState(
+        language,
+      );
+      return result;
+    }
+
     try {
       if (await file.length() > 2 * 1024 * 1024) {
         result['readSkipped'] = 'file_larger_than_2_mib';
@@ -1011,7 +1069,10 @@ class DiagnosticService {
         final lines = utf8
             .decode(bytes, allowMalformed: true)
             .split('\n')
-            .where((line) => relevant.hasMatch(line))
+            .where(
+              (line) =>
+                  relevant.hasMatch(line) && !_looksLikeOpaqueEncodedLine(line),
+            )
             .take(400)
             .map(LauncherLog.redactSensitiveValues)
             .join('\n');
@@ -1034,6 +1095,18 @@ class DiagnosticService {
       }
     }
     return results;
+  }
+
+  bool _looksLikeOpaqueEncodedLine(String line) {
+    final value = line.trim();
+    if (value.length < 96 || value.contains(' ') || value.contains('\t')) {
+      return false;
+    }
+    // GameUserSettings/log payloads can contain long Base64 ciphertext lines.
+    // Keyword substring matching inside ciphertext produces meaningless noise
+    // (for example an accidental "mod" or "error" sequence), so suppress a
+    // line only when it strongly resembles one opaque encoded token.
+    return RegExp(r'^[A-Za-z0-9+/=_-]+$').hasMatch(value);
   }
 
   Future<List<File>> _recentCrashLogs(String gameDirectory) async {
