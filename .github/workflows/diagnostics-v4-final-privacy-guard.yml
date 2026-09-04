@@ -56,13 +56,14 @@ jobs:
 
           $exportOld = "    final file = await controller.exportDiagnostics(reveal: false);"
           $exportNew = @'
+              final canonicalGameDirectory = controller.gameDirectory!;
               await harness.receipts.write(
-                game.path,
+                canonicalGameDirectory,
                 InstallReceipt(
                   schemaVersion: InstallReceipt.currentSchemaVersion,
                   translationVersion: 'privacy-test',
                   installedAt: DateTime.utc(2026, 9, 4),
-                  gameDirectory: game.path,
+                  gameDirectory: canonicalGameDirectory,
                   manifestPublishedAt: DateTime.utc(2026, 9, 4),
                   textLanguage: const TextLanguageReceipt(
                     configPath: r'C:\Users\PrivateProfile\AppData\Local\HT\Saved_Global\Config\Windows\GameUserSettings.ini',
