@@ -1,0 +1,271 @@
+name: Diagnostics v4 startup export retry
+
+on:
+  push:
+    branches:
+      - feat/diagnostics-schema-v4
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Patch startup diagnostics
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('lib/main.dart')
+          text = path.read_text(encoding='utf-8')
+          if "package:file_picker/file_picker.dart" not in text:
+              text = text.replace(
+                  "import 'package:flutter/material.dart';\n",
+                  "import 'package:file_picker/file_picker.dart';\nimport 'package:flutter/material.dart';\n",
+                  1,
+              )
+
+          if "'ui_attached'" not in text:
+              start = text.index('void main(List<String> arguments) {')
+              end = text.index('\n\nFuture<LauncherController>', start)
+              new_main = '''void main(List<String> arguments) {
+            BootstrapDiagnostics.recordSync(
+              'process_started',
+              details: {
+                'arguments': arguments,
+                'operatingSystem': Platform.operatingSystem,
+                'operatingSystemVersion': Platform.operatingSystemVersion,
+                'resolvedExecutable': Platform.resolvedExecutable,
+              },
+            );
+            BootstrapDiagnostics.recordSync(
+              'bootstrap_stage',
+              details: {'stage': 'flutter_binding_initialize'},
+            );
+            try {
+              WidgetsFlutterBinding.ensureInitialized();
+            } catch (error, stackTrace) {
+              BootstrapDiagnostics.recordSync(
+                'bootstrap_failed',
+                details: {
+                  'stage': 'flutter_binding_initialize',
+                  'errorType': error.runtimeType.toString(),
+                  'error': error.toString(),
+                  'stackTrace': stackTrace
+                      .toString()
+                      .split('\\n')
+                      .take(80)
+                      .join('\\n'),
+                },
+              );
+              rethrow;
+            }
+
+            final previousFlutterError = FlutterError.onError;
+            FlutterError.onError = (details) {
+              BootstrapDiagnostics.recordSync(
+                'flutter_uncaught_error',
+                details: {
+                  'exceptionType': details.exception.runtimeType.toString(),
+                  'exception': details.exceptionAsString(),
+                  'library': details.library,
+                  'context': details.context?.toDescription(),
+                  'stackTrace': details.stack
+                      ?.toString()
+                      .split('\\n')
+                      .take(80)
+                      .join('\\n'),
+                },
+              );
+              if (previousFlutterError != null) {
+                previousFlutterError(details);
+              } else {
+                FlutterError.presentError(details);
+              }
+            };
+
+            final dispatcher = PlatformDispatcher.instance;
+            final previousPlatformError = dispatcher.onError;
+            dispatcher.onError = (error, stackTrace) {
+              BootstrapDiagnostics.recordSync(
+                'platform_uncaught_error',
+                details: {
+                  'errorType': error.runtimeType.toString(),
+                  'error': error.toString(),
+                  'stackTrace': stackTrace
+                      .toString()
+                      .split('\\n')
+                      .take(80)
+                      .join('\\n'),
+                },
+              );
+              return previousPlatformError?.call(error, stackTrace) ?? false;
+            };
+
+            runApp(LauncherBootstrap(arguments: arguments));
+            BootstrapDiagnostics.recordSync('ui_attached');
+          }'''
+              text = text[:start] + new_main + text[end:]
+
+          if '_saveBootstrapDiagnostic' not in text:
+              marker = "  final VoidCallback onRetry;\n\n  @override"
+              method = '''  final VoidCallback onRetry;
+
+            Future<void> _saveBootstrapDiagnostic(BuildContext context) async {
+              try {
+                final selectedPath = await FilePicker.platform.saveFile(
+                  dialogTitle: 'Salvar diagnóstico de inicialização',
+                  fileName: 'nte-bootstrap-diagnostico.json',
+                  type: FileType.custom,
+                  allowedExtensions: const ['json'],
+                );
+                if (selectedPath == null) return;
+                final destination = File(selectedPath);
+                await BootstrapDiagnostics.exportStandalone(destination);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Diagnóstico de inicialização salvo em ${destination.path}',
+                    ),
+                  ),
+                );
+              } catch (error) {
+                BootstrapDiagnostics.recordSync(
+                  'bootstrap_standalone_diagnostic_export_failed',
+                  details: {
+                    'errorType': error.runtimeType.toString(),
+                    'error': error.toString(),
+                  },
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Não foi possível salvar o diagnóstico: $error',
+                    ),
+                  ),
+                );
+              }
+            }
+
+            @override'''
+              if marker not in text:
+                  raise SystemExit('startup method marker not found')
+              text = text.replace(marker, method, 1)
+
+          if "'Salvar diagnóstico de inicialização'," not in text:
+              label = "label: const Text('Tentar novamente'),"
+              label_at = text.index(label)
+              call_at = text.rfind('FilledButton.icon(', 0, label_at)
+              if call_at < 0:
+                  raise SystemExit('retry button start not found')
+              line_start = text.rfind('\n', 0, call_at) + 1
+              indent = text[line_start:call_at]
+              close_at = text.index(f"\n{indent}),", label_at)
+              close_end = close_at + len(f"\n{indent}),")
+              replacement = (
+                  f"{indent}Wrap(\n"
+                  f"{indent}  alignment: WrapAlignment.center,\n"
+                  f"{indent}  spacing: 12,\n"
+                  f"{indent}  runSpacing: 12,\n"
+                  f"{indent}  children: [\n"
+                  f"{indent}    FilledButton.icon(\n"
+                  f"{indent}      onPressed: onRetry,\n"
+                  f"{indent}      icon: const Icon(Icons.refresh_rounded),\n"
+                  f"{indent}      label: const Text('Tentar novamente'),\n"
+                  f"{indent}    ),\n"
+                  f"{indent}    OutlinedButton.icon(\n"
+                  f"{indent}      onPressed: () => _saveBootstrapDiagnostic(context),\n"
+                  f"{indent}      icon: const Icon(Icons.save_alt_rounded),\n"
+                  f"{indent}      label: const Text(\n"
+                  f"{indent}        'Salvar diagnóstico de inicialização',\n"
+                  f"{indent}      ),\n"
+                  f"{indent}    ),\n"
+                  f"{indent}  ],\n"
+                  f"{indent}),"
+              )
+              text = text[:line_start] + replacement + text[close_end:]
+
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('test/bootstrap_diagnostics_test.dart')
+          if not test_path.exists():
+              test_path.write_text('''import 'dart:convert';
+          import 'dart:io';
+
+          import 'package:flutter_test/flutter_test.dart';
+          import 'package:nte_translation_launcher/core/bootstrap_diagnostics.dart';
+
+          void main() {
+            test('standalone bootstrap diagnostic is valid JSON', () async {
+              final directory = await Directory.systemTemp.createTemp(
+                'nte-bootstrap-diagnostic-test-',
+              );
+              addTearDown(() async {
+                if (await directory.exists()) {
+                  await directory.delete(recursive: true);
+                }
+              });
+
+              BootstrapDiagnostics.recordSync(
+                'bootstrap_test_event',
+                details: {'stage': 'test'},
+              );
+              final file = await BootstrapDiagnostics.exportStandalone(
+                File('${directory.path}${Platform.pathSeparator}diagnostico.json'),
+              );
+              expect(await file.exists(), isTrue);
+
+              final decoded = jsonDecode(await file.readAsString())
+                  as Map<String, dynamic>;
+              expect(decoded['schemaVersion'], 1);
+              expect(decoded['reportType'], 'bootstrap-diagnostic');
+              expect(decoded['currentSessionId'], isNotEmpty);
+              expect(decoded['bootstrapHistory'], isA<List<dynamic>>());
+            });
+          }
+          ''', encoding='utf-8')
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Format
+        run: dart format .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test bootstrap and controller diagnostics
+        run: |
+          flutter test test/bootstrap_diagnostics_test.dart
+          flutter test test/launcher_controller_test.dart
+
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart test/bootstrap_diagnostics_test.dart
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "feat: export diagnostics when launcher bootstrap fails"
+            git push
+          fi
