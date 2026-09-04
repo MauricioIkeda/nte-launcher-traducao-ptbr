@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   dispatch:
-    if: ${{ github.event.head_commit.message == 'chore: repair launcher 1.4.7 dispatch' }}
+    if: "${{ github.event.head_commit.message == 'chore: finalize launcher 1.4.7 dispatch' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch official launcher release
