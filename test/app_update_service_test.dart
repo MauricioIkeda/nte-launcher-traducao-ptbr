@@ -63,16 +63,74 @@ void main() {
       'NTE-Launcher-Traducao-PTBR-Setup.exe',
     );
   });
+
+  test('release candidate accepts the same stable version as replacement', () {
+    final candidate = AppUpdateService(
+      paths,
+      LauncherLog(paths.logFile),
+      currentVersion: '1.4.7',
+      releaseCandidate: true,
+    );
+    final stable = updateManifest(
+      version: '1.4.7',
+      size: 3,
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced528'
+          '7d84a1a2011cfb81',
+    );
+
+    expect(candidate.isUpdateAvailable(stable, '1.4.7'), isTrue);
+  });
+
+  test('stable build does not reinstall the same stable version', () {
+    final stableService = AppUpdateService(
+      paths,
+      LauncherLog(paths.logFile),
+      currentVersion: '1.4.7',
+      releaseCandidate: false,
+    );
+    final stable = updateManifest(
+      version: '1.4.7',
+      size: 3,
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced528'
+          '7d84a1a2011cfb81',
+    );
+
+    expect(stableService.isUpdateAvailable(stable, '1.4.7'), isFalse);
+  });
+
+  test('release candidate still rejects an older stable version', () {
+    final candidate = AppUpdateService(
+      paths,
+      LauncherLog(paths.logFile),
+      currentVersion: '1.4.7',
+      releaseCandidate: true,
+    );
+    final older = updateManifest(
+      version: '1.4.6',
+      size: 3,
+      sha256:
+          '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced528'
+          '7d84a1a2011cfb81',
+    );
+
+    expect(candidate.isUpdateAvailable(older, '1.4.7'), isFalse);
+  });
 }
 
-AppUpdateManifest updateManifest({required int size, required String sha256}) {
+AppUpdateManifest updateManifest({
+  String version = '1.1.0',
+  required int size,
+  required String sha256,
+}) {
   return AppUpdateManifest(
     schemaVersion: 1,
-    version: '1.1.0',
+    version: version,
     publishedAt: DateTime.utc(2026, 7, 27),
     installerUrl: Uri.parse(
       'https://github.com/owner/repository/releases/download/'
-      'v1.1.0/Setup.exe',
+      'v$version/Setup.exe',
     ),
     installerSize: size,
     installerSha256: sha256,

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RC_VERSION: "1.4.6"
+  RC_VERSION: "1.4.7"
 
 jobs:
   build-rc:
@@ -51,6 +51,7 @@ jobs:
           flutter build windows --release
           --build-name "${{ env.RC_VERSION }}"
           --build-number "${{ github.run_number }}"
+          --dart-define=NTE_RELEASE_CANDIDATE=true
 
       - name: Sign launcher executable
         if: env.HAS_WINDOWS_SIGNING_CERTIFICATE == 'true'
