@@ -164,7 +164,7 @@ void main() {
     final diagnostics = await file.readAsString();
     final decoded = jsonDecode(diagnostics) as Map<String, dynamic>;
 
-    expect(decoded['schemaVersion'], 3);
+    expect(decoded['schemaVersion'], 4);
     expect(diagnostics, contains('verificationStatus'));
     expect(decoded['privacy']['singleFile'], isTrue);
     expect(decoded['launcher']['gameDirectory'], game.path);

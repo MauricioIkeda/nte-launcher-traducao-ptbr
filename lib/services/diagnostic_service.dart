@@ -387,7 +387,8 @@ class DiagnosticService {
   Future<Map<String, Object?>> _pathEnvironment(String gameDirectory) async {
     final lower = gameDirectory.toLowerCase();
     return {
-      'underProgramFiles': Platform.isWindows &&
+      'underProgramFiles':
+          Platform.isWindows &&
           (lower.contains(r'\program files\') ||
               lower.contains(r'\program files (x86)\')),
       'pathLength': gameDirectory.length,
@@ -409,7 +410,10 @@ class DiagnosticService {
       'Win64',
     );
     final sigLog = File(p.join(win64, 'SigBypasser.log'));
-    final lastLaunch = _latestEventTime(operationHistory, 'game_launch_started');
+    final lastLaunch = _latestEventTime(
+      operationHistory,
+      'game_launch_started',
+    );
     final lastDispatch = _latestEventTime(
       operationHistory,
       'game_launch_dispatched',
@@ -427,7 +431,9 @@ class DiagnosticService {
     final lastModified = _dateFromObject(logDescription['lastModified']);
     final changedAfterLaunch = lastLaunch == null || lastModified == null
         ? null
-        : !lastModified.isBefore(lastLaunch.subtract(const Duration(seconds: 2)));
+        : !lastModified.isBefore(
+            lastLaunch.subtract(const Duration(seconds: 2)),
+          );
 
     String status;
     if (lastLaunch == null) {
@@ -533,10 +539,7 @@ class DiagnosticService {
 
   Future<Map<String, Object?>> _loadedModuleEvidence() async {
     if (!Platform.isWindows) {
-      return {
-        'supported': false,
-        'reason': 'module_snapshot_is_windows_only',
-      };
+      return {'supported': false, 'reason': 'module_snapshot_is_windows_only'};
     }
     try {
       final result = await Process.run('tasklist.exe', const [
@@ -566,10 +569,7 @@ class DiagnosticService {
         if (error.isNotEmpty) 'stderr': error,
       };
     } catch (error) {
-      return {
-        'supported': true,
-        'queryError': error.toString(),
-      };
+      return {'supported': true, 'queryError': error.toString()};
     }
   }
 
@@ -612,7 +612,9 @@ class DiagnosticService {
           if (!name.endsWith('.asi') && !_knownProxyDlls.contains(name)) {
             continue;
           }
-          final relative = p.normalize(p.relative(entity.path, from: gameDirectory));
+          final relative = p.normalize(
+            p.relative(entity.path, from: gameDirectory),
+          );
           final isManaged = managed.contains(relative.toLowerCase());
           loaderCandidates.add({
             'relativePath': relative,
@@ -655,17 +657,23 @@ class DiagnosticService {
           }
           inspectedContainers++;
           extensionCounts[extension] = (extensionCounts[extension] ?? 0) + 1;
-          final relative = p.normalize(p.relative(entity.path, from: gameDirectory));
+          final relative = p.normalize(
+            p.relative(entity.path, from: gameDirectory),
+          );
           final lowerRelative = relative.toLowerCase();
           final name = p.basename(entity.path).toLowerCase();
           final isManaged = managed.contains(lowerRelative);
-          final inModDirectory = normalizedRoot != p.normalize(paks.path).toLowerCase();
+          final inModDirectory =
+              normalizedRoot != p.normalize(paks.path).toLowerCase();
           final highPriority = name.contains('_p.');
           final nameLooksModded = RegExp(
             r'pt.?br|portugu|trad|localiz|mod|pakchunk999',
             caseSensitive: false,
           ).hasMatch(name);
-          if (!isManaged && !inModDirectory && !highPriority && !nameLooksModded) {
+          if (!isManaged &&
+              !inModDirectory &&
+              !highPriority &&
+              !nameLooksModded) {
             continue;
           }
           containerCandidates.add({
@@ -961,7 +969,8 @@ class DiagnosticService {
       result['lastChanged'] = stat.changed.toUtc().toIso8601String();
       result['mode'] = stat.mode;
       if (includeHash && (hashLimitBytes == null || size <= hashLimitBytes)) {
-        result['sha256'] = (await sha256.bind(file.openRead()).first).toString();
+        result['sha256'] = (await sha256.bind(file.openRead()).first)
+            .toString();
       } else if (includeHash) {
         result['sha256Skipped'] = 'file_larger_than_${hashLimitBytes}_bytes';
       }
@@ -1079,7 +1088,9 @@ class DiagnosticService {
     String? selectedId;
     if (selectedGameDirectory != null) {
       try {
-        selectedId = (await installer.receipts.storageFor(selectedGameDirectory)).id;
+        selectedId = (await installer.receipts.storageFor(
+          selectedGameDirectory,
+        )).id;
       } catch (_) {}
     }
     final results = <Map<String, Object?>>[];
@@ -1158,14 +1169,13 @@ class DiagnosticService {
           active['interruptedByNewInitialization'] = true;
           sessions.add(active);
         }
-        active = {
-          'startedAt': at?.toIso8601String(),
-          'completed': false,
-        };
+        active = {'startedAt': at?.toIso8601String(), 'completed': false};
       } else if (event == 'launcher_initialize_completed' && active != null) {
         active['completed'] = true;
         active['completedAt'] = at?.toIso8601String();
-        final started = DateTime.tryParse(active['startedAt']?.toString() ?? '');
+        final started = DateTime.tryParse(
+          active['startedAt']?.toString() ?? '',
+        );
         if (started != null && at != null) {
           active['durationMs'] = at.difference(started).inMilliseconds;
         }
@@ -1186,7 +1196,9 @@ class DiagnosticService {
     final recent = sessions.reversed.take(10).toList().reversed.toList();
     return {
       'recentInitializations': recent,
-      'incompleteCount': recent.where((entry) => entry['completed'] != true).length,
+      'incompleteCount': recent
+          .where((entry) => entry['completed'] != true)
+          .length,
       'hasRecentInterruptedInitialization': recent.any(
         (entry) => entry['interruptedByNewInitialization'] == true,
       ),
@@ -1311,10 +1323,12 @@ class DiagnosticService {
     }
     if (Platform.isLinux) {
       try {
-        final uid = await Process.run('id', const ['-u'])
-            .timeout(const Duration(seconds: 2));
-        final gid = await Process.run('id', const ['-g'])
-            .timeout(const Duration(seconds: 2));
+        final uid = await Process.run('id', const [
+          '-u',
+        ]).timeout(const Duration(seconds: 2));
+        final gid = await Process.run('id', const [
+          '-g',
+        ]).timeout(const Duration(seconds: 2));
         final uidText = uid.stdout.toString().trim();
         return {
           'uid': int.tryParse(uidText),
@@ -1350,6 +1364,7 @@ class DiagnosticService {
         ).firstMatch(text);
         return match == null ? null : int.tryParse(match.group(1)!, radix: 16);
       }
+
       return {
         'enableLUA': value('EnableLUA'),
         'consentPromptBehaviorAdmin': value('ConsentPromptBehaviorAdmin'),
@@ -1368,8 +1383,9 @@ class DiagnosticService {
       try {
         final values = <String, int>{};
         for (final line in await file.readAsLines()) {
-          final match = RegExp(r'^(MemTotal|MemAvailable):\s+(\d+)\s+kB')
-              .firstMatch(line);
+          final match = RegExp(
+            r'^(MemTotal|MemAvailable):\s+(\d+)\s+kB',
+          ).firstMatch(line);
           if (match != null) {
             values[match.group(1)!] = int.parse(match.group(2)!) * 1024;
           }
@@ -1392,6 +1408,7 @@ class DiagnosticService {
           final value = raw is num ? raw.toInt() : int.tryParse('$raw');
           return value == null ? null : value * 1024;
         }
+
         return {
           'totalPhysicalMemoryBytes': kib('TotalVisibleMemorySize'),
           'availablePhysicalMemoryBytes': kib('FreePhysicalMemory'),
@@ -1478,8 +1495,11 @@ class DiagnosticService {
   Future<Map<String, Object?>?> _pathStorage(String path) async {
     if (Platform.isLinux) {
       try {
-        final result = await Process.run('df', ['-PT', '--', path])
-            .timeout(const Duration(seconds: 3));
+        final result = await Process.run('df', [
+          '-PT',
+          '--',
+          path,
+        ]).timeout(const Duration(seconds: 3));
         if (result.exitCode != 0) {
           return {
             'queryExitCode': result.exitCode,
