@@ -50,4 +50,37 @@ void main() {
     expect(excerpts.single['content'], isNot(contains('refresh-json')));
     expect(excerpts.single['content'], isNot(contains('token-http')));
   });
+
+  test('redacts NTE player identity and local profile details', () {
+    const roleLine =
+        '23:59:05.254 [21092]: [DEBUG] '
+        '[CHDGamePlayerMgr::setRoleInfo] '
+        '{"appId":"3000001","uid":"2000714618",'
+        '"token":"secret-token","roleName":"Sora",'
+        '"roleId":"218211476267","extraInfo":'
+        '"{\\"rolePosition\\":\\"-91161,132033,9535\\"}"}';
+    const generic =
+        'did:device-fingerprint token=plain-secret '
+        'path=C:\\Users\\PrivateUser\\AppData\\Local\\HT\\Saved_Global '
+        'linux=/home/private-user/.local/share/nte';
+
+    final redactedRole = LauncherLog.redactSensitiveValues(roleLine);
+    final redactedGeneric = LauncherLog.redactSensitiveValues(generic);
+
+    expect(redactedRole, contains('[REDACTED_PLAYER_INFO]'));
+    expect(redactedRole, isNot(contains('2000714618')));
+    expect(redactedRole, isNot(contains('secret-token')));
+    expect(redactedRole, isNot(contains('Sora')));
+    expect(redactedRole, isNot(contains('218211476267')));
+    expect(redactedRole, isNot(contains('-91161')));
+
+    expect(redactedGeneric, contains('did:[REDACTED]'));
+    expect(redactedGeneric, contains('token=[REDACTED]'));
+    expect(redactedGeneric, contains(r'C:\Users\[REDACTED_USER]\AppData'));
+    expect(redactedGeneric, contains('/home/[REDACTED_USER]/.local'));
+    expect(redactedGeneric, isNot(contains('device-fingerprint')));
+    expect(redactedGeneric, isNot(contains('plain-secret')));
+    expect(redactedGeneric, isNot(contains('PrivateUser')));
+    expect(redactedGeneric, isNot(contains('private-user'));
+  });
 }
