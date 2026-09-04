@@ -146,7 +146,7 @@ jobs:
           "@ | Set-Content -Path (Join-Path $output "RC_INFO.txt") -Encoding UTF8
 
           $hashes = @(
-            Get-FileHash $installerCopy -Algorithm SHA256,
+            Get-FileHash $installerCopy -Algorithm SHA256
             Get-FileHash $portable -Algorithm SHA256
           )
           $hashes | ForEach-Object {
