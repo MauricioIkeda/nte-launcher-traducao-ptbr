@@ -126,7 +126,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       // Do not trust IsWindowVisible as proof that the Linux compositor has
       // presented the window. Reconcile the parent and Flutter child once,
       // without stealing focus, then ask Flutter for another frame.
-      Show();
+      ::ShowWindow(hwnd, SW_SHOWNOACTIVATE);
       ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                          SWP_SHOWWINDOW);
