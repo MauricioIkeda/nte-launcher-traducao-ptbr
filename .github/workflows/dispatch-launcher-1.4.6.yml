@@ -1,0 +1,28 @@
+name: Dispatch launcher 1.4.6 release
+
+on:
+  push:
+    branches:
+      - feat/diagnostics-schema-v4
+    paths:
+      - ".github/workflows/dispatch-launcher-1.4.6.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: contains(github.event.head_commit.message, 'ci: dispatch launcher 1.4.6 release')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release-launcher.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f version=1.4.6 \
+            -f release_notes="Diagnóstico V4 com telemetria ampliada para suporte, evidências de runtime e Wine/Proton, além de reforços de privacidade." \
+            -f mandatory=false
