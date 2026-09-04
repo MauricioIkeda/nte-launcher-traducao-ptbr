@@ -216,8 +216,9 @@ void main() {
     expect(decoded['schemaVersion'], 4);
     expect(diagnostics, contains('verificationStatus'));
     expect(decoded['privacy']['singleFile'], isTrue);
-    expect(decoded['launcher']['gameDirectory'], game.path);
-    expect(decoded['game']['normalizedDirectory'], game.path);
+    final redactedGamePath = LauncherLog.redactSensitiveValues(game.path);
+    expect(decoded['launcher']['gameDirectory'], redactedGamePath);
+    expect(decoded['game']['normalizedDirectory'], redactedGamePath);
     expect(
       decoded['game']['actualGameBuildEvidence']['detectedVersion'],
       '1.0.8.0807_2',
