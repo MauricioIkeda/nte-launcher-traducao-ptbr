@@ -1,0 +1,71 @@
+name: Diagnostics v4 runtime evidence refinement
+
+on:
+  push:
+    branches:
+      - feat/diagnostics-schema-v4
+    paths:
+      - tool/refine_diagnostics_v4_runtime_evidence.py
+      - .github/workflows/diagnostics-v4-runtime-evidence-refine.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Apply refinement
+        run: python tool/refine_diagnostics_v4_runtime_evidence.py
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Format
+        run: >
+          dart format
+          lib/services/diagnostic_service.dart
+          lib/services/game_language_service.dart
+          test/game_language_service_test.dart
+          test/launcher_controller_test.dart
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test language diagnostics
+        run: flutter test test/game_language_service_test.dart
+
+      - name: Test launcher diagnostics
+        run: flutter test test/launcher_controller_test.dart
+
+      - name: Commit validated refinement
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            lib/services/diagnostic_service.dart \
+            lib/services/game_language_service.dart \
+            test/game_language_service_test.dart \
+            test/launcher_controller_test.dart
+          if git diff --cached --quiet; then
+            echo "No implementation changes."
+          else
+            git commit -m "fix: make runtime diagnostics evidence trustworthy"
+            git push
+          fi
