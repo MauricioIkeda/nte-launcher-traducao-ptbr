@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -34,7 +35,6 @@ const _ink = Color(0xFF07182B);
 const _muted = Color(0xFFA9B9C9);
 
 void main(List<String> arguments) {
-  WidgetsFlutterBinding.ensureInitialized();
   BootstrapDiagnostics.recordSync(
     'process_started',
     details: {
@@ -44,6 +44,24 @@ void main(List<String> arguments) {
       'resolvedExecutable': Platform.resolvedExecutable,
     },
   );
+  BootstrapDiagnostics.recordSync(
+    'bootstrap_stage',
+    details: {'stage': 'flutter_binding_initialize'},
+  );
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+  } catch (error, stackTrace) {
+    BootstrapDiagnostics.recordSync(
+      'bootstrap_failed',
+      details: {
+        'stage': 'flutter_binding_initialize',
+        'errorType': error.runtimeType.toString(),
+        'error': error.toString(),
+        'stackTrace': stackTrace.toString().split('\n').take(80).join('\n'),
+      },
+    );
+    rethrow;
+  }
 
   final previousFlutterError = FlutterError.onError;
   FlutterError.onError = (details) {
@@ -79,6 +97,7 @@ void main(List<String> arguments) {
   };
 
   runApp(LauncherBootstrap(arguments: arguments));
+  BootstrapDiagnostics.recordSync('ui_attached');
 }
 
 Future<LauncherController> _initializeLauncher(List<String> arguments) async {
@@ -222,6 +241,42 @@ class _LauncherStartupPage extends StatelessWidget {
   final Object? error;
   final VoidCallback onRetry;
 
+  Future<void> _saveBootstrapDiagnostic(BuildContext context) async {
+    try {
+      final selectedPath = await FilePicker.saveFile(
+        dialogTitle: 'Salvar diagnóstico de inicialização',
+        fileName: 'nte-bootstrap-diagnostico.json',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+      );
+      if (selectedPath == null) return;
+      final destination = File(selectedPath);
+      await BootstrapDiagnostics.exportStandalone(destination);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Diagnóstico de inicialização salvo em ${destination.path}',
+          ),
+        ),
+      );
+    } catch (error) {
+      BootstrapDiagnostics.recordSync(
+        'bootstrap_standalone_diagnostic_export_failed',
+        details: {
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+        },
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Não foi possível salvar o diagnóstico: $error'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final failed = error != null;
@@ -283,10 +338,24 @@ class _LauncherStartupPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: onRetry,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Tentar novamente'),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: onRetry,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Tentar novamente'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _saveBootstrapDiagnostic(context),
+                          icon: const Icon(Icons.save_alt_rounded),
+                          label: const Text(
+                            'Salvar diagnóstico de inicialização',
+                          ),
+                        ),
+                      ],
                     ),
                   ] else ...[
                     const SizedBox(height: 28),
