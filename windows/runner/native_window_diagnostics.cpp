@@ -69,7 +69,7 @@ std::string UtcNow() {
 std::wstring ResolveFilePath() {
   wchar_t temp_path[MAX_PATH + 1]{};
   const DWORD length = ::GetTempPathW(MAX_PATH, temp_path);
-  if (length == 0 || length > MAX_PATH) {
+  if (length == 0 || length >= MAX_PATH) {
     return kFileName;
   }
   return std::wstring(temp_path, length) + kFileName;
