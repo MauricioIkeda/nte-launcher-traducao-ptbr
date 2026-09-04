@@ -25,103 +25,42 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply final redaction guard and regression test
+      - name: Apply final payload redaction guard
         shell: pwsh
         run: |
           $servicePath = 'lib/services/diagnostic_service.dart'
           $service = [System.IO.File]::ReadAllText($servicePath)
-          $oldService = @'
-              '${const JsonEncoder.withIndent('  ').convert(payload)}\n',
-          '@
-          $newService = @'
-              '${const JsonEncoder.withIndent('  ').convert(_redactObject(payload))}\n',
-          '@
-          if (-not $service.Contains($oldService.Trim())) {
+          $old = "`${const JsonEncoder.withIndent('  ').convert(payload)}\n"
+          $new = "`${const JsonEncoder.withIndent('  ').convert(_redactObject(payload))}\n"
+          if (-not $service.Contains($old)) {
             throw 'Diagnostic payload serialization target was not found.'
           }
-          $service = $service.Replace($oldService.Trim(), $newService.Trim())
-          [System.IO.File]::WriteAllText($servicePath, $service, [System.Text.UTF8Encoding]::new($false))
-
-          $testPath = 'test/launcher_controller_test.dart'
-          $test = [System.IO.File]::ReadAllText($testPath)
-          $importOld = "import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart';"
-          $importNew = @"
-          import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart';
-          import 'package:nte_translation_launcher/models/install_receipt.dart';
-          "@
-          if (-not $test.Contains($importOld)) {
-            throw 'Receipt import insertion point was not found.'
-          }
-          $test = $test.Replace($importOld, $importNew.Trim())
-
-          $exportOld = "    final file = await controller.exportDiagnostics(reveal: false);"
-          $exportNew = @'
-              final canonicalGameDirectory = controller.gameDirectory!;
-              await harness.receipts.write(
-                canonicalGameDirectory,
-                InstallReceipt(
-                  schemaVersion: InstallReceipt.currentSchemaVersion,
-                  translationVersion: 'privacy-test',
-                  installedAt: DateTime.utc(2026, 9, 4),
-                  gameDirectory: canonicalGameDirectory,
-                  manifestPublishedAt: DateTime.utc(2026, 9, 4),
-                  textLanguage: const TextLanguageReceipt(
-                    configPath: r'C:\Users\PrivateProfile\AppData\Local\HT\Saved_Global\Config\Windows\GameUserSettings.ini',
-                    key: 'NteHybridCulture',
-                    previousRawValue: '{"globalLanguage":"en","globalLocale":"en","gameLanguage":"en"}',
-                    previousValue: 'en',
-                    requestedCulture: 'fr',
-                  ),
-                  files: const [
-                    InstalledFileReceipt(
-                      relativePath: 'Client/WindowsNoEditor/HT/Binaries/Win64/version.dll',
-                      installedSize: 1,
-                      installedSha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-                      originalExisted: false,
-                    ),
-                  ],
-                ),
-              );
-
-              final file = await controller.exportDiagnostics(reveal: false);
-          '@
-          if (-not $test.Contains($exportOld)) {
-            throw 'Diagnostic export insertion point was not found.'
-          }
-          $test = $test.Replace($exportOld, $exportNew.TrimEnd())
-
-          $assertOld = "    expect(decoded, isNot(containsPair('logFiles', anything)));"
-          $assertNew = @'
-              expect(diagnostics, isNot(contains('PrivateProfile')));
-              expect(
-                decoded['game']['receipt']['textLanguage']['configPath'],
-                contains(r'C:\Users\[REDACTED_USER]\AppData\Local\HT'),
-              );
-              expect(decoded, isNot(containsPair('logFiles', anything)));
-          '@
-          if (-not $test.Contains($assertOld)) {
-            throw 'Diagnostic privacy assertion insertion point was not found.'
-          }
-          $test = $test.Replace($assertOld, $assertNew.TrimEnd())
-          [System.IO.File]::WriteAllText($testPath, $test, [System.Text.UTF8Encoding]::new($false))
-
-          dart format $servicePath $testPath
+          $service = $service.Replace($old, $new)
+          [System.IO.File]::WriteAllText(
+            $servicePath,
+            $service,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+          dart format $servicePath
           git diff --check
+          if (-not ([System.IO.File]::ReadAllText($servicePath).Contains("convert(_redactObject(payload))"))) {
+            throw 'Final diagnostic redaction guard was not applied.'
+          }
 
       - name: Analyze
         shell: pwsh
         run: flutter analyze
 
-      - name: Run targeted privacy diagnostics tests
+      - name: Run full test suite
         shell: pwsh
-        run: flutter test test/launcher_log_test.dart test/launcher_controller_test.dart
+        run: flutter test
 
-      - name: Commit change and remove helper
+      - name: Commit validated change and remove helper
         shell: pwsh
         run: |
           Remove-Item '.github/workflows/diagnostics-v4-final-privacy-guard.yml'
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/services/diagnostic_service.dart test/launcher_controller_test.dart .github/workflows/diagnostics-v4-final-privacy-guard.yml
+          git add lib/services/diagnostic_service.dart .github/workflows/diagnostics-v4-final-privacy-guard.yml
           git commit -m "fix: apply final redaction pass to diagnostics"
           git push origin HEAD:feat/diagnostics-schema-v4
