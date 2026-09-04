@@ -101,8 +101,11 @@ void main() {
         );
         expect(verification.validFiles, hasLength(5));
 
+        // Exercise ordinary repair with a non-container asset. PAK/UTOC/UCAS
+        // are intentionally protected from blind overwrite because a game
+        // update may have legitimately taken ownership of the same path.
         final tampered = File(
-          p.join(game.path, manifest.files.last.relativeDestination),
+          p.join(game.path, manifest.files[1].relativeDestination),
         );
         await tampered.writeAsBytes([99, 99, 99]);
         verification = await verifier.verify(
