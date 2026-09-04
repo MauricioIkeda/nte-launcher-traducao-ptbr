@@ -52,6 +52,7 @@ jobs:
           flutter build windows --release
           --build-name "${{ env.RC_VERSION }}"
           --build-number "${{ github.run_number }}"
+          --dart-define=NTE_RELEASE_CANDIDATE=true
 
       - name: Sign launcher executable
         if: env.HAS_WINDOWS_SIGNING_CERTIFICATE == 'true'
@@ -113,7 +114,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "RC installer signing failed." }
           & $signTool verify /pa /v `
             "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe"
-          if ($LASTEXITCODE -ne 0) { throw "RC installer signature verification failed." }
+          if ($LASTEXITCODE -ne 0) { throw "Launcher installer signature verification failed." }
 
       - name: Package candidate artifacts
         shell: pwsh
