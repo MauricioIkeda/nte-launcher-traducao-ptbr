@@ -176,6 +176,10 @@ class LauncherController extends ChangeNotifier {
     verification = const TranslationVerificationResult.checking();
     _notify();
     try {
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'settings'},
+      );
       final savedGameDirectory = await settings.getGameDirectory();
       persistedInstalledVersion = await settings.getInstalledVersion();
       automaticLauncherUpdates = await settings.getAutomaticLauncherUpdates();
@@ -183,6 +187,10 @@ class LauncherController extends ChangeNotifier {
       // Force every existing installation away from the unsafe cold
       // /autoplay path, including users who previously enabled the option.
       await settings.setOfficialAutoplay(false);
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'game_directory_resolution'},
+      );
       final savedResolution = savedGameDirectory == null
           ? null
           : await installer.resolveGameDirectory(savedGameDirectory);
@@ -205,9 +213,17 @@ class LauncherController extends ChangeNotifier {
         return;
       }
       if (gameDirectory != null) {
+        await diagnostics.record(
+          'launcher_initialize_stage',
+          details: {'stage': 'platform_detection'},
+        );
         await _detectGamePlatform(operation);
       }
 
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'manifest_load'},
+      );
       status = LauncherStatus.loadingManifest;
       _notify();
       loadedManifest = await manifests.load();
@@ -215,6 +231,10 @@ class LauncherController extends ChangeNotifier {
         return;
       }
       totalBytes = manifest?.totalBytes ?? 0;
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'translation_recovery'},
+      );
       if (loadedManifest != null && gameDirectory != null) {
         final recovery = await installer.recoverAbandoned(
           gameDirectory!,
@@ -228,9 +248,17 @@ class LauncherController extends ChangeNotifier {
                 '${recovery.unresolvedPaths.join(', ')}',
           );
         } else {
+          await diagnostics.record(
+            'launcher_initialize_stage',
+            details: {'stage': 'legacy_migration'},
+          );
           await migration.migrateWhenProvable(
             gameDirectory: gameDirectory!,
             loadedManifest: loadedManifest!,
+          );
+          await diagnostics.record(
+            'launcher_initialize_stage',
+            details: {'stage': 'translation_verification'},
           );
           await _verifyCurrent(operation);
         }
@@ -243,18 +271,24 @@ class LauncherController extends ChangeNotifier {
         return;
       }
 
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'launcher_update_check'},
+      );
       await checkLauncherUpdates();
       if (!_isCurrent(operation)) {
         return;
       }
       final launcherUpdate = availableAppUpdate;
       if (launcherUpdate != null &&
-          launcherUpdate.shouldInstallAutomatically(
-            automaticLauncherUpdates,
-          )) {
+          launcherUpdate.shouldInstallAutomatically(automaticLauncherUpdates)) {
         await installLauncherUpdate();
         return;
       }
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'finalizing'},
+      );
       status = LauncherStatus.ready;
       await log.info(
         'Launcher inicializado; estado da tradução: '

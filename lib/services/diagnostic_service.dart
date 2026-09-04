@@ -251,6 +251,11 @@ class DiagnosticService {
       },
       'privilege': await _privilegeState(),
       'uacPolicy': await _uacPolicy(),
+      'processMitigation': Platform.isWindows && !RuntimeEnvironment.isWine
+          ? await _powershellJson(
+              r'Get-ProcessMitigation -Name HTGame.exe -ErrorAction Stop | Select-Object DEP,ASLR,CFG,ImageLoad,Signature | ConvertTo-Json -Depth 6 -Compress',
+            )
+          : null,
       'systemResources': await _systemResources(),
       'graphics': await _graphicsInfo(),
       'securityProducts': await _securityProducts(),
@@ -833,7 +838,7 @@ class DiagnosticService {
     });
 
     final results = <Map<String, Object?>>[];
-    for (final file in existing.take(_maxGameLogs)) {
+    for (final file in existing.take(_maxGameLogs - 3)) {
       try {
         final length = await file.length();
         final bytes = await _readTailBytes(file, _maxGameLogBytes);
@@ -1170,6 +1175,15 @@ class DiagnosticService {
           sessions.add(active);
         }
         active = {'startedAt': at?.toIso8601String(), 'completed': false};
+      } else if (event == 'launcher_initialize_stage' && active != null) {
+        final details = item['details'];
+        if (details is Map) {
+          final stage = details['stage']?.toString();
+          if (stage != null && stage.isNotEmpty) {
+            active['lastStage'] = stage;
+            active['lastStageAt'] = at?.toIso8601String();
+          }
+        }
       } else if (event == 'launcher_initialize_completed' && active != null) {
         active['completed'] = true;
         active['completedAt'] = at?.toIso8601String();
@@ -1548,8 +1562,12 @@ class DiagnosticService {
   }
 
   Future<Map<String, String>?> _linuxDistribution() async {
-    if (!Platform.isLinux) return null;
-    final file = File('/etc/os-release');
+    final file = Platform.isLinux
+        ? File('/etc/os-release')
+        : Platform.isWindows && RuntimeEnvironment.isWine
+        ? File(r'Z:\etc\os-release')
+        : null;
+    if (file == null) return null;
     if (!await file.exists()) return null;
     try {
       final values = <String, String>{};

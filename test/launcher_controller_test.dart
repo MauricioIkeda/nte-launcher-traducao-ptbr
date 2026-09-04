@@ -171,6 +171,13 @@ void main() {
     expect(decoded['game']['normalizedDirectory'], game.path);
     expect(decoded['launcher']['verification'], isA<Map<String, dynamic>>());
     expect(decoded['runtime'], isA<Map<String, dynamic>>());
+    expect(decoded['diagnosticCapabilities']['fullGameClientSha256'], isTrue);
+    expect(decoded['startupHealth'], isA<Map<String, dynamic>>());
+    expect(decoded['game']['translationRuntime'], isA<Map<String, dynamic>>());
+    expect(
+      decoded['game']['modAndLoaderInventory'],
+      isA<Map<String, dynamic>>(),
+    );
     expect(decoded['operationHistory'], isA<List<dynamic>>());
     expect(decoded['embeddedLogs']['launcher'], isA<List<dynamic>>());
     expect(decoded['embeddedLogs']['game'], isNotEmpty);
