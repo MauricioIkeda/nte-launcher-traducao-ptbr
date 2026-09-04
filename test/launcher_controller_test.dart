@@ -173,6 +173,8 @@ void main() {
     expect(decoded['runtime'], isA<Map<String, dynamic>>());
     expect(decoded['diagnosticCapabilities']['fullGameClientSha256'], isTrue);
     expect(decoded['startupHealth'], isA<Map<String, dynamic>>());
+    expect(decoded['bootstrapHealth'], isA<Map<String, dynamic>>());
+    expect(decoded['bootstrapHistory'], isA<List<dynamic>>());
     expect(decoded['game']['translationRuntime'], isA<Map<String, dynamic>>());
     expect(
       decoded['game']['modAndLoaderInventory'],

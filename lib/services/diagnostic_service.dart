@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../core/app_paths.dart';
+import '../core/bootstrap_diagnostics.dart';
 import '../core/launcher_log.dart';
 import '../core/runtime_environment.dart';
 import '../models/install_receipt.dart';
@@ -95,6 +96,7 @@ class DiagnosticService {
 
     final createdAt = DateTime.now().toUtc();
     final operationHistory = await _readOperationHistory();
+    final bootstrapHistory = await BootstrapDiagnostics.readRecent();
     final runtime = await _collectRuntime();
     final game = await _collectGame(
       gameDirectory,
@@ -124,6 +126,8 @@ class DiagnosticService {
       },
       'diagnosticCapabilities': {
         'runtimeLoaderEvidence': true,
+        'bootstrapBlackBox': true,
+        'globalErrorCapture': true,
         'loadedModuleInspection': Platform.isWindows,
         'fullGameClientSha256': true,
         'foreignModInventory': true,
@@ -134,6 +138,8 @@ class DiagnosticService {
         'filteredUnrealLogInspection': true,
       },
       'launcher': _redactObject(launcherState),
+      'bootstrapHealth': _analyzeBootstrapHistory(bootstrapHistory),
+      'bootstrapHistory': bootstrapHistory,
       'startupHealth': _analyzeStartupHistory(operationHistory),
       'runtime': runtime,
       'game': game,
@@ -1160,6 +1166,75 @@ class DiagnosticService {
         {'readError': error.toString()},
       ];
     }
+  }
+
+  Map<String, Object?> _analyzeBootstrapHistory(List<Object?> history) {
+    final sessions = <String, Map<String, Object?>>{};
+    final order = <String>[];
+    for (final item in history) {
+      if (item is! Map) continue;
+      final sessionId = item['sessionId']?.toString();
+      if (sessionId == null || sessionId.isEmpty) continue;
+      final event = item['event']?.toString();
+      final at = item['at']?.toString();
+      final session = sessions.putIfAbsent(sessionId, () {
+        order.add(sessionId);
+        return {
+          'sessionId': sessionId,
+          'startedAt': at,
+          'completed': false,
+          'failed': false,
+          'uncaughtErrorCount': 0,
+        };
+      });
+      session['lastEvent'] = event;
+      session['lastEventAt'] = at;
+      if (event == 'process_started') {
+        session['startedAt'] = at;
+      } else if (event == 'bootstrap_stage') {
+        final details = item['details'];
+        if (details is Map) {
+          session['lastStage'] = details['stage']?.toString();
+          session['lastStageAt'] = at;
+        }
+      } else if (event == 'bootstrap_completed') {
+        session['completed'] = true;
+        session['completedAt'] = at;
+      } else if (event == 'bootstrap_failed') {
+        session['failed'] = true;
+        session['failedAt'] = at;
+        session['failure'] = item['details'];
+      } else if (event == 'flutter_uncaught_error' ||
+          event == 'platform_uncaught_error') {
+        session['uncaughtErrorCount'] =
+            (session['uncaughtErrorCount'] as int? ?? 0) + 1;
+        session['lastUncaughtError'] = item['details'];
+        session['lastUncaughtErrorAt'] = at;
+      }
+    }
+    final recent = order.reversed
+        .take(10)
+        .map((id) => sessions[id]!)
+        .toList()
+        .reversed
+        .toList();
+    return {
+      'recentSessions': recent,
+      'incompleteBootstrapCount': recent
+          .where(
+            (session) =>
+                session['completed'] != true && session['failed'] != true,
+          )
+          .length,
+      'failedBootstrapCount': recent
+          .where((session) => session['failed'] == true)
+          .length,
+      'uncaughtErrorCount': recent.fold<int>(
+        0,
+        (total, session) =>
+            total + (session['uncaughtErrorCount'] as int? ?? 0),
+      ),
+    };
   }
 
   Map<String, Object?> _analyzeStartupHistory(List<Object?> history) {
