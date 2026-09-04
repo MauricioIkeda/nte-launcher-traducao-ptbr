@@ -81,6 +81,6 @@ void main() {
     expect(redactedGeneric, isNot(contains('device-fingerprint')));
     expect(redactedGeneric, isNot(contains('plain-secret')));
     expect(redactedGeneric, isNot(contains('PrivateUser')));
-    expect(redactedGeneric, isNot(contains('private-user'));
+    expect(redactedGeneric, isNot(contains('private-user')));
   });
 }
