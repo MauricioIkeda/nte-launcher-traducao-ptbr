@@ -347,6 +347,7 @@ class DiagnosticService {
       'receipt': receipt?.toJson(),
       'receiptError': receiptRead.error?.toString(),
       'temporaryReceiptFound': receiptRead.temporaryReceiptFound,
+      'actualGameBuildEvidence': await _gameBuildEvidence(normalizedDirectory),
       'sourceIdentityComparison': {
         'manifestGameBuildId': manifest?.gameBuildId,
         'installedGameBuildId': receipt?.gameBuildId,
@@ -393,6 +394,113 @@ class DiagnosticService {
         'transactions': await _directorySummary(storage.transactions),
       },
     };
+  }
+
+  Future<Map<String, Object?>> _gameBuildEvidence(String gameDirectory) async {
+    final logRoots = <Directory>[
+      Directory(p.join(gameDirectory, 'NTEGlobal', 'UserData', 'Log')),
+      Directory(p.join(gameDirectory, 'NTE Global', 'UserData', 'Log')),
+      Directory(p.join(gameDirectory, 'UserData', 'Log')),
+    ];
+    final seen = <String>{};
+    final launcherCandidates = <File>[];
+    final updateCandidates = <File>[];
+    for (final root in logRoots) {
+      final key = p.normalize(root.path).toLowerCase();
+      if (!seen.add(key)) continue;
+      launcherCandidates.add(File(p.join(root.path, 'NTEGlobalGame.log')));
+      updateCandidates.add(File(p.join(root.path, 'NTEGlobalUpdate.log')));
+    }
+
+    final launcher = await _latestExistingFile(launcherCandidates);
+    final update = await _latestExistingFile(updateCandidates);
+    final launcherEvidence = launcher == null
+        ? null
+        : await _launcherBuildEvidence(launcher);
+    final updateEvidence = update == null
+        ? null
+        : await _updateBuildEvidence(update);
+    return {
+      'launcher': launcherEvidence,
+      'updater': updateEvidence,
+      'detectedVersion':
+          launcherEvidence?['version'] ??
+          updateEvidence?['currentVersion'] ??
+          updateEvidence?['availableVersion'],
+      'detectedBuild':
+          launcherEvidence?['build'] ??
+          updateEvidence?['currentBuild'] ??
+          updateEvidence?['availableBuild'],
+      'note':
+          'Evidência extraída dos logs do launcher oficial do NTE. '
+          'O formato pode diferir do gameBuildId editorial do manifesto; '
+          'por isso não é declarada compatibilidade automaticamente.',
+    };
+  }
+
+  Future<File?> _latestExistingFile(List<File> candidates) async {
+    final existing = <File>[];
+    for (final file in candidates) {
+      if (await file.exists()) existing.add(file);
+    }
+    if (existing.isEmpty) return null;
+    existing.sort((first, second) {
+      try {
+        return second.lastModifiedSync().compareTo(first.lastModifiedSync());
+      } catch (_) {
+        return 0;
+      }
+    });
+    return existing.first;
+  }
+
+  Future<Map<String, Object?>> _launcherBuildEvidence(File file) async {
+    final result = <String, Object?>{'file': await _describeFile(file)};
+    try {
+      final bytes = await _readTailBytes(file, _maxHtLogScanBytes);
+      final source = utf8.decode(bytes, allowMalformed: true);
+      final matches = RegExp(
+        r'Current version:\s*([^\s(]+)\s*\(build:([^\)]+)\)',
+        caseSensitive: false,
+      ).allMatches(source).toList();
+      if (matches.isNotEmpty) {
+        final match = matches.last;
+        result['version'] = match.group(1)?.trim();
+        result['build'] = match.group(2)?.trim();
+      }
+    } catch (error) {
+      result['readError'] = error.toString();
+    }
+    return result;
+  }
+
+  Future<Map<String, Object?>> _updateBuildEvidence(File file) async {
+    final result = <String, Object?>{'file': await _describeFile(file)};
+    try {
+      final bytes = await _readTailBytes(file, _maxHtLogScanBytes);
+      final source = utf8.decode(bytes, allowMalformed: true);
+      final available = RegExp(
+        r'Get new version succeed,\s*Version=([^,\s]+),\s*BuildNo=([^\s]+)',
+        caseSensitive: false,
+      ).allMatches(source).toList();
+      if (available.isNotEmpty) {
+        final match = available.last;
+        result['availableVersion'] = match.group(1)?.trim();
+        result['availableBuild'] = match.group(2)?.trim();
+      }
+      final current = RegExp(
+        r'Current(?:\s+client)?\s+version[:=]\s*([^,\s]+)(?:,?\s*Build(?:No)?[:=]\s*([^\s]+))?',
+        caseSensitive: false,
+      ).allMatches(source).toList();
+      if (current.isNotEmpty) {
+        final match = current.last;
+        result['currentVersion'] = match.group(1)?.trim();
+        result['currentBuild'] = match.group(2)?.trim();
+      }
+    } catch (error) {
+      result['readError'] = error.toString();
+    }
+    return result;
   }
 
   Future<Map<String, Object?>> _pathEnvironment(String gameDirectory) async {

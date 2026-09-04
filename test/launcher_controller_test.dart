@@ -149,6 +149,7 @@ void main() {
     );
     await officialLog.parent.create(recursive: true);
     await officialLog.writeAsString(
+      'Current version: 1.0.8.0807_2(build:76a5250a)\n'
       'all ready, wait for start game access_token=hidden-game-token',
     );
     await paths.officialLaunchResultFile.parent.create(recursive: true);
@@ -169,6 +170,14 @@ void main() {
     expect(decoded['privacy']['singleFile'], isTrue);
     expect(decoded['launcher']['gameDirectory'], game.path);
     expect(decoded['game']['normalizedDirectory'], game.path);
+    expect(
+      decoded['game']['actualGameBuildEvidence']['detectedVersion'],
+      '1.0.8.0807_2',
+    );
+    expect(
+      decoded['game']['actualGameBuildEvidence']['detectedBuild'],
+      '76a5250a',
+    );
     expect(decoded['launcher']['verification'], isA<Map<String, dynamic>>());
     expect(decoded['runtime'], isA<Map<String, dynamic>>());
     expect(decoded['diagnosticCapabilities']['fullGameClientSha256'], isTrue);
