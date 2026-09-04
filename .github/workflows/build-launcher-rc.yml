@@ -112,7 +112,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "RC installer signing failed." }
           & $signTool verify /pa /v `
             "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe"
-          if ($LASTEXITCODE -ne 0) { throw "RC installer signature verification failed." }
+          if ($LASTEXITCODE -ne 0) { throw "Launcher signature verification failed." }
 
       - name: Package candidate artifacts
         shell: pwsh
