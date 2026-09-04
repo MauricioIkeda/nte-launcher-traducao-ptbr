@@ -8,12 +8,18 @@ class BootstrapDiagnostics {
 
   static const _maximumBytes = 384 * 1024;
   static const _maximumEvents = 250;
+  static const _nativeWindowMaximumEvents = 200;
   static final String sessionId =
       '${DateTime.now().toUtc().microsecondsSinceEpoch}-$pid';
 
   static File get _file => File(
     '${Directory.systemTemp.path}${Platform.pathSeparator}'
     'nte-translation-launcher-bootstrap.jsonl',
+  );
+
+  static File get _nativeWindowFile => File(
+    '${Directory.systemTemp.path}${Platform.pathSeparator}'
+    'nte-translation-launcher-window.jsonl',
   );
 
   static void recordSync(
@@ -45,27 +51,70 @@ class BootstrapDiagnostics {
   }
 
   static Future<List<Object?>> readRecent() async {
+    final result = <Object?>[];
     final file = _file;
+    if (await file.exists()) {
+      try {
+        final lines = await file.readAsLines();
+        final selected = lines.reversed
+            .where((line) => line.trim().isNotEmpty)
+            .take(_maximumEvents)
+            .toList()
+            .reversed;
+        for (final line in selected) {
+          try {
+            result.add(jsonDecode(line));
+          } catch (_) {
+            result.add({'malformed': LauncherLog.redactSensitiveValues(line)});
+          }
+        }
+      } catch (error) {
+        result.add({
+          'readError': LauncherLog.redactSensitiveValues(error.toString()),
+        });
+      }
+    }
+
+    final nativeWindowHistory = await _readNativeWindowRecent();
+    if (nativeWindowHistory.isNotEmpty) {
+      // This synthetic entry intentionally has no sessionId. Bootstrap health
+      // analysis therefore ignores it, while the full diagnostic still carries
+      // native window evidence from the current and previous Wine sessions.
+      result.add({
+        'event': 'native_window_history_snapshot',
+        'source': 'nativeWindow',
+        'details': {'events': nativeWindowHistory},
+      });
+    }
+    return result;
+  }
+
+  static Future<List<Object?>> _readNativeWindowRecent() async {
+    final file = _nativeWindowFile;
     if (!await file.exists()) return const [];
     try {
       final lines = await file.readAsLines();
       final selected = lines.reversed
           .where((line) => line.trim().isNotEmpty)
-          .take(_maximumEvents)
+          .take(_nativeWindowMaximumEvents)
           .toList()
           .reversed;
       final result = <Object?>[];
       for (final line in selected) {
         try {
-          result.add(jsonDecode(line));
+          result.add(_sanitize(jsonDecode(line)));
         } catch (_) {
-          result.add({'malformed': LauncherLog.redactSensitiveValues(line)});
+          result.add({
+            'malformed': LauncherLog.redactSensitiveValues(line),
+          });
         }
       }
       return result;
     } catch (error) {
       return [
-        {'readError': LauncherLog.redactSensitiveValues(error.toString())},
+        {
+          'readError': LauncherLog.redactSensitiveValues(error.toString()),
+        },
       ];
     }
   }
