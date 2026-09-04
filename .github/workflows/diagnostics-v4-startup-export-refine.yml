@@ -1,0 +1,257 @@
+name: Diagnostics v4 startup export refinement
+
+on:
+  push:
+    branches:
+      - feat/diagnostics-schema-v4
+
+permissions:
+  contents: write
+
+jobs:
+  refine-startup-export:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+
+      - name: Add standalone startup export
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('lib/main.dart')
+          text = path.read_text(encoding='utf-8')
+          if "package:file_picker/file_picker.dart" not in text:
+              text = text.replace(
+                  "import 'package:flutter/material.dart';\n",
+                  "import 'package:file_picker/file_picker.dart';\nimport 'package:flutter/material.dart';\n",
+                  1,
+              )
+
+          old_prefix = """void main(List<String> arguments) {
+            WidgetsFlutterBinding.ensureInitialized();
+            BootstrapDiagnostics.recordSync(
+              'process_started',
+          """
+          new_prefix = """void main(List<String> arguments) {
+            BootstrapDiagnostics.recordSync(
+              'process_started',
+          """
+          if old_prefix in text:
+              text = text.replace(old_prefix, new_prefix, 1)
+              process_end = """      'resolvedExecutable': Platform.resolvedExecutable,
+                },
+              );
+
+              final previousFlutterError = FlutterError.onError;
+          """
+              binding_block = """      'resolvedExecutable': Platform.resolvedExecutable,
+                },
+              );
+              BootstrapDiagnostics.recordSync(
+                'bootstrap_stage',
+                details: {'stage': 'flutter_binding_initialize'},
+              );
+              try {
+                WidgetsFlutterBinding.ensureInitialized();
+              } catch (error, stackTrace) {
+                BootstrapDiagnostics.recordSync(
+                  'bootstrap_failed',
+                  details: {
+                    'stage': 'flutter_binding_initialize',
+                    'errorType': error.runtimeType.toString(),
+                    'error': error.toString(),
+                    'stackTrace': stackTrace
+                        .toString()
+                        .split('\\n')
+                        .take(80)
+                        .join('\\n'),
+                  },
+                );
+                rethrow;
+              }
+
+              final previousFlutterError = FlutterError.onError;
+          """
+              if process_end not in text:
+                  raise SystemExit('process startup anchor not found')
+              text = text.replace(process_end, binding_block, 1)
+
+          if "'ui_attached'" not in text:
+              text = text.replace(
+                  "  runApp(LauncherBootstrap(arguments: arguments));\n}\n\nFuture<LauncherController>",
+                  "  runApp(LauncherBootstrap(arguments: arguments));\n"
+                  "  BootstrapDiagnostics.recordSync('ui_attached');\n"
+                  "}\n\nFuture<LauncherController>",
+                  1,
+              )
+
+          class_anchor = """class _LauncherStartupPage extends StatelessWidget {
+            const _LauncherStartupPage({required this.error, required this.onRetry});
+
+            final Object? error;
+            final VoidCallback onRetry;
+
+            @override
+          """
+          class_replacement = """class _LauncherStartupPage extends StatelessWidget {
+            const _LauncherStartupPage({required this.error, required this.onRetry});
+
+            final Object? error;
+            final VoidCallback onRetry;
+
+            Future<void> _saveBootstrapDiagnostic(BuildContext context) async {
+              try {
+                final selectedPath = await FilePicker.platform.saveFile(
+                  dialogTitle: 'Salvar diagnóstico de inicialização',
+                  fileName: 'nte-bootstrap-diagnostico.json',
+                  type: FileType.custom,
+                  allowedExtensions: const ['json'],
+                );
+                if (selectedPath == null) return;
+                final destination = File(selectedPath);
+                await BootstrapDiagnostics.exportStandalone(destination);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Diagnóstico de inicialização salvo em ${destination.path}',
+                    ),
+                  ),
+                );
+              } catch (error) {
+                BootstrapDiagnostics.recordSync(
+                  'bootstrap_standalone_diagnostic_export_failed',
+                  details: {
+                    'errorType': error.runtimeType.toString(),
+                    'error': error.toString(),
+                  },
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Não foi possível salvar o diagnóstico: $error',
+                    ),
+                  ),
+                );
+              }
+            }
+
+            @override
+          """
+          if '_saveBootstrapDiagnostic' not in text:
+              if class_anchor not in text:
+                  raise SystemExit('startup page class anchor not found')
+              text = text.replace(class_anchor, class_replacement, 1)
+
+          old_button = """                FilledButton.icon(
+                                  onPressed: onRetry,
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('Tentar novamente'),
+                                ),
+          """
+          new_button = """                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: [
+                                    FilledButton.icon(
+                                      onPressed: onRetry,
+                                      icon: const Icon(Icons.refresh_rounded),
+                                      label: const Text('Tentar novamente'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () =>
+                                          _saveBootstrapDiagnostic(context),
+                                      icon: const Icon(Icons.save_alt_rounded),
+                                      label: const Text(
+                                        'Salvar diagnóstico de inicialização',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+          """
+          if 'Salvar diagnóstico de inicialização' not in text:
+              if old_button not in text:
+                  raise SystemExit('retry button anchor not found')
+              text = text.replace(old_button, new_button, 1)
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('test/bootstrap_diagnostics_test.dart')
+          if not test_path.exists():
+              test_path.write_text("""import 'dart:convert';
+          import 'dart:io';
+
+          import 'package:flutter_test/flutter_test.dart';
+          import 'package:nte_translation_launcher/core/bootstrap_diagnostics.dart';
+
+          void main() {
+            test('standalone bootstrap diagnostic is valid JSON', () async {
+              final directory = await Directory.systemTemp.createTemp(
+                'nte-bootstrap-diagnostic-test-',
+              );
+              addTearDown(() async {
+                if (await directory.exists()) {
+                  await directory.delete(recursive: true);
+                }
+              });
+
+              BootstrapDiagnostics.recordSync(
+                'bootstrap_test_event',
+                details: {'stage': 'test'},
+              );
+              final file = await BootstrapDiagnostics.exportStandalone(
+                File('${directory.path}${Platform.pathSeparator}diagnostico.json'),
+              );
+              expect(await file.exists(), isTrue);
+
+              final decoded = jsonDecode(await file.readAsString())
+                  as Map<String, dynamic>;
+              expect(decoded['schemaVersion'], 1);
+              expect(decoded['reportType'], 'bootstrap-diagnostic');
+              expect(decoded['currentSessionId'], isNotEmpty);
+              expect(decoded['bootstrapHistory'], isA<List<dynamic>>());
+            });
+          }
+          """, encoding='utf-8')
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Format
+        run: dart format .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test bootstrap and controller diagnostics
+        run: |
+          flutter test test/bootstrap_diagnostics_test.dart
+          flutter test test/launcher_controller_test.dart
+
+      - name: Commit validated startup export
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart test/bootstrap_diagnostics_test.dart
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "feat: export diagnostics when launcher bootstrap fails"
+            git push
+          fi
