@@ -1,0 +1,127 @@
+name: One-shot final diagnostic privacy guard
+
+on:
+  push:
+    branches:
+      - feat/diagnostics-schema-v4
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore: add one-shot final diagnostic privacy guard'
+    runs-on: windows-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: feat/diagnostics-schema-v4
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@2783a3f08e1eaf891508463cbc54d8e2460c5b03
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+
+      - name: Apply final redaction guard and regression test
+        shell: pwsh
+        run: |
+          $servicePath = 'lib/services/diagnostic_service.dart'
+          $service = [System.IO.File]::ReadAllText($servicePath)
+          $oldService = @'
+              '${const JsonEncoder.withIndent('  ').convert(payload)}\n',
+          '@
+          $newService = @'
+              '${const JsonEncoder.withIndent('  ').convert(_redactObject(payload))}\n',
+          '@
+          if (-not $service.Contains($oldService.Trim())) {
+            throw 'Diagnostic payload serialization target was not found.'
+          }
+          $service = $service.Replace($oldService.Trim(), $newService.Trim())
+          [System.IO.File]::WriteAllText($servicePath, $service, [System.Text.UTF8Encoding]::new($false))
+
+          $testPath = 'test/launcher_controller_test.dart'
+          $test = [System.IO.File]::ReadAllText($testPath)
+          $importOld = "import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart';"
+          $importNew = @"
+          import 'package:nte_translation_launcher/models/loaded_translation_manifest.dart';
+          import 'package:nte_translation_launcher/models/install_receipt.dart';
+          "@
+          if (-not $test.Contains($importOld)) {
+            throw 'Receipt import insertion point was not found.'
+          }
+          $test = $test.Replace($importOld, $importNew.Trim())
+
+          $exportOld = "    final file = await controller.exportDiagnostics(reveal: false);"
+          $exportNew = @'
+              await harness.receipts.write(
+                game.path,
+                InstallReceipt(
+                  schemaVersion: InstallReceipt.currentSchemaVersion,
+                  translationVersion: 'privacy-test',
+                  installedAt: DateTime.utc(2026, 9, 4),
+                  gameDirectory: game.path,
+                  manifestPublishedAt: DateTime.utc(2026, 9, 4),
+                  textLanguage: const TextLanguageReceipt(
+                    configPath: r'C:\Users\PrivateProfile\AppData\Local\HT\Saved_Global\Config\Windows\GameUserSettings.ini',
+                    key: 'NteHybridCulture',
+                    previousRawValue: '{"globalLanguage":"en","globalLocale":"en","gameLanguage":"en"}',
+                    previousValue: 'en',
+                    requestedCulture: 'fr',
+                  ),
+                  files: const [
+                    InstalledFileReceipt(
+                      relativePath: 'Client/WindowsNoEditor/HT/Binaries/Win64/version.dll',
+                      installedSize: 1,
+                      installedSha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                      originalExisted: false,
+                    ),
+                  ],
+                ),
+              );
+
+              final file = await controller.exportDiagnostics(reveal: false);
+          '@
+          if (-not $test.Contains($exportOld)) {
+            throw 'Diagnostic export insertion point was not found.'
+          }
+          $test = $test.Replace($exportOld, $exportNew.TrimEnd())
+
+          $assertOld = "    expect(decoded, isNot(containsPair('logFiles', anything)));"
+          $assertNew = @'
+              expect(diagnostics, isNot(contains('PrivateProfile')));
+              expect(
+                decoded['game']['receipt']['textLanguage']['configPath'],
+                contains(r'C:\Users\[REDACTED_USER]\AppData\Local\HT'),
+              );
+              expect(decoded, isNot(containsPair('logFiles', anything)));
+          '@
+          if (-not $test.Contains($assertOld)) {
+            throw 'Diagnostic privacy assertion insertion point was not found.'
+          }
+          $test = $test.Replace($assertOld, $assertNew.TrimEnd())
+          [System.IO.File]::WriteAllText($testPath, $test, [System.Text.UTF8Encoding]::new($false))
+
+          dart format $servicePath $testPath
+          git diff --check
+
+      - name: Analyze
+        shell: pwsh
+        run: flutter analyze
+
+      - name: Run targeted privacy diagnostics tests
+        shell: pwsh
+        run: flutter test test/launcher_log_test.dart test/launcher_controller_test.dart
+
+      - name: Commit change and remove helper
+        shell: pwsh
+        run: |
+          Remove-Item '.github/workflows/diagnostics-v4-final-privacy-guard.yml'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/services/diagnostic_service.dart test/launcher_controller_test.dart .github/workflows/diagnostics-v4-final-privacy-guard.yml
+          git commit -m "fix: apply final redaction pass to diagnostics"
+          git push origin HEAD:feat/diagnostics-schema-v4
