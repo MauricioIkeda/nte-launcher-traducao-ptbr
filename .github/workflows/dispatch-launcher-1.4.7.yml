@@ -1,0 +1,26 @@
+name: Dispatch launcher 1.4.7 release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    if: github.event.head_commit.message == 'chore: dispatch launcher 1.4.7 release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch official launcher release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh workflow run release-launcher.yml
+          --repo "${{ github.repository }}"
+          --ref main
+          -f version=1.4.7
+          -f release_notes="Melhora a compatibilidade da janela sob Wine/Proton e amplia o diagnóstico de inicialização no Linux."
+          -f mandatory=false
