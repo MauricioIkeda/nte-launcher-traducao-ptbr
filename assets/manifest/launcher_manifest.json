@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.6",
-  "publishedAt": "2026-09-04T04:40:07Z",
+  "version": "1.4.7",
+  "publishedAt": "2026-09-04T13:21:17Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.6/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19601672,
-    "sha256": "44e2ac10557bd7ea2842ea6234545804e1af4958cb04549dc77daaf160252266"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.7/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19604057,
+    "sha256": "4dbc69b8b630e1c946190b80fac10914dcd0713c25e56107bcf0dee64aae35aa"
   },
-  "releaseNotes": "Diagnóstico V4 com telemetria ampliada para suporte, evidências de runtime e Wine/Proton, além de reforços de privacidade.",
+  "releaseNotes": "Melhora a compatibilidade da janela sob Wine/Proton e amplia o diagnóstico de inicialização no Linux.",
   "mandatory": false
 }
