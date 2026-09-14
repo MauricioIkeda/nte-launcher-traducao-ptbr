@@ -12,6 +12,7 @@ TranslationManifest testManifest({
   DateTime? publishedAt,
   List<List<int>>? contents,
   bool frenchHost = false,
+  String? hostedCulture,
 }) {
   final values =
       contents ??
@@ -19,14 +20,15 @@ TranslationManifest testManifest({
         [1, 2, 3],
         [4, 5, 6, 7],
       ];
+  final culture = hostedCulture ?? (frenchHost ? 'fr' : null);
   return TranslationManifest.fromJson({
     'schemaVersion': 1,
     'translationVersion': version,
     'publishedAt': (publishedAt ?? DateTime.utc(2026, 7, 29)).toIso8601String(),
-    if (frenchHost)
+    if (culture != null)
       'localization': {
         'sourceCulture': 'en',
-        'installationCulture': 'fr',
+        'installationCulture': culture,
         'targetLanguage': 'pt-BR',
         'hostCompatible': true,
         'hostLocresSha256': 'e' * 64,

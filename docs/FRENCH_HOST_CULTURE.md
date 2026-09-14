@@ -29,3 +29,7 @@ Regras de segurança:
 - uma reinstalação mantém a preferência original registrada na primeira instalação.
 
 A mudança automática é um conforto. A ausência de uma chave detectável não bloqueia a instalação da tradução; nesse caso o usuário pode selecionar francês manualmente.
+
+Para instalações novas do Studio V2, o slot recomendado passou a ser `es`. A
+migração de uma instalação gerenciada em `fr` é feita atomicamente durante a
+atualização; consulte [STUDIO_V2_ES_HOST_CULTURE.md](STUDIO_V2_ES_HOST_CULTURE.md).

@@ -11,12 +11,17 @@ class LanguageSwitchResult {
     this.receipt,
     this.reason,
     this.preservedUserChoice = false,
+    this.migratedFromCulture,
   });
 
   final bool changed;
   final TextLanguageReceipt? receipt;
   final String? reason;
   final bool preservedUserChoice;
+
+  /// Set when an existing managed installation was moved between host slots
+  /// (for example, the V1 French slot to the V2 Spanish slot).
+  final String? migratedFromCulture;
 }
 
 class LanguageRestoreResult {
@@ -168,7 +173,20 @@ class GameLanguageService {
       previous: previous,
     );
     if (encrypted != null) {
-      final receipt = _hybridReceipt(encrypted, requestedCulture, previous);
+      final transition = _prepareEncryptedTransition(
+        encrypted,
+        requestedCulture,
+        previous,
+      );
+      if (transition.preserveUserChoice) {
+        return LanguageSwitchResult(
+          changed: false,
+          receipt: previous,
+          reason: transition.reason,
+          preservedUserChoice: true,
+        );
+      }
+      final receipt = transition.receipt!;
       final changed =
           encrypted.globalLanguage.toLowerCase() != 'en' ||
           encrypted.globalLocale.toLowerCase() != 'en' ||
@@ -181,7 +199,11 @@ class GameLanguageService {
           gameLanguage: requestedCulture,
         );
       }
-      return LanguageSwitchResult(changed: changed, receipt: receipt);
+      return LanguageSwitchResult(
+        changed: changed,
+        receipt: receipt,
+        migratedFromCulture: transition.migratedFromCulture,
+      );
     }
 
     return _ensurePlainCulture(
@@ -223,50 +245,136 @@ class GameLanguageService {
     return _restorePlain(file, receipt);
   }
 
-  TextLanguageReceipt _hybridReceipt(
+  ({
+    TextLanguageReceipt? receipt,
+    bool preserveUserChoice,
+    String? reason,
+    String? migratedFromCulture,
+  })
+  _prepareEncryptedTransition(
     _EncryptedState current,
     String culture,
     TextLanguageReceipt? previous,
   ) {
-    if (previous != null &&
-        p.equals(
-          p.normalize(previous.configPath),
-          p.normalize(current.file.path),
-        )) {
+    if (previous != null && _sameConfigFile(current.file, previous)) {
       final key = _normalizeKey(previous.key);
-      if (key == _normalizeKey(_nteHybridKey)) {
-        return previous;
+      final previousCulture = previous.requestedCulture.toLowerCase();
+      final managed = _encryptedStateMatchesCulture(current, previousCulture);
+      if (!managed) {
+        return (
+          receipt: previous,
+          preserveUserChoice: true,
+          reason:
+              'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
+          migratedFromCulture: null,
+        );
       }
-      if (key == _normalizeKey(_nteEncryptedKey)) {
-        final baseline = previous.previousValue.toLowerCase();
-        if (_encryptedLanguageLines.containsKey(baseline) &&
-            _encryptedLocaleLines.containsKey(baseline)) {
-          return TextLanguageReceipt(
-            configPath: current.file.path,
-            key: _nteHybridKey,
-            previousRawValue: jsonEncode({
-              'globalLanguage': baseline,
-              'globalLocale': baseline,
-              'gameLanguage': baseline,
-            }),
-            previousValue: baseline,
-            requestedCulture: culture,
+
+      if (previousCulture == culture) {
+        if (key == _normalizeKey(_nteHybridKey)) {
+          return (
+            receipt: previous,
+            preserveUserChoice: false,
+            reason: null,
+            migratedFromCulture: null,
           );
         }
+        if (key == _normalizeKey(_nteEncryptedKey)) {
+          final baseline = _encryptedBaselineFromReceipt(previous);
+          if (baseline != null) {
+            return (
+              receipt: _hybridReceiptFromBaseline(
+                current.file,
+                culture,
+                baseline,
+              ),
+              preserveUserChoice: false,
+              reason: null,
+              migratedFromCulture: null,
+            );
+          }
+        }
       }
+
+      final baseline = _encryptedBaselineFromReceipt(previous);
+      if (baseline == null) {
+        return (
+          receipt: previous,
+          preserveUserChoice: true,
+          reason:
+              'A linha de idioma da instalação anterior não pôde ser revalidada; a migração foi bloqueada.',
+          migratedFromCulture: null,
+        );
+      }
+      return (
+        receipt: _hybridReceiptFromBaseline(current.file, culture, baseline),
+        preserveUserChoice: false,
+        reason: null,
+        migratedFromCulture: previousCulture == culture
+            ? null
+            : previousCulture,
+      );
     }
 
-    return TextLanguageReceipt(
-      configPath: current.file.path,
-      key: _nteHybridKey,
-      previousRawValue: jsonEncode({
-        'globalLanguage': current.globalLanguage,
-        'globalLocale': current.globalLocale,
-        'gameLanguage': current.gameLanguage,
-      }),
-      previousValue: current.gameLanguage,
-      requestedCulture: culture,
+    return (
+      receipt: _hybridReceiptFromBaseline(
+        current.file,
+        culture,
+        _HybridBaseline(
+          current.globalLanguage,
+          current.globalLocale,
+          current.gameLanguage,
+        ),
+      ),
+      preserveUserChoice: false,
+      reason: null,
+      migratedFromCulture: null,
     );
+  }
+
+  TextLanguageReceipt _hybridReceiptFromBaseline(
+    File file,
+    String culture,
+    _HybridBaseline baseline,
+  ) => TextLanguageReceipt(
+    configPath: file.path,
+    key: _nteHybridKey,
+    previousRawValue: jsonEncode({
+      'globalLanguage': baseline.globalLanguage,
+      'globalLocale': baseline.globalLocale,
+      'gameLanguage': baseline.gameLanguage,
+    }),
+    previousValue: baseline.gameLanguage,
+    requestedCulture: culture,
+  );
+
+  _HybridBaseline? _encryptedBaselineFromReceipt(TextLanguageReceipt receipt) {
+    final key = _normalizeKey(receipt.key);
+    if (key == _normalizeKey(_nteHybridKey)) {
+      return _parseHybridBaseline(receipt.previousRawValue);
+    }
+    if (key == _normalizeKey(_nteEncryptedKey)) {
+      final baseline = receipt.previousValue.toLowerCase();
+      if (_encryptedLanguageLines.containsKey(baseline) &&
+          _encryptedLocaleLines.containsKey(baseline)) {
+        return _HybridBaseline(baseline, baseline, baseline);
+      }
+    }
+    return null;
+  }
+
+  bool _sameConfigFile(File file, TextLanguageReceipt previous) =>
+      p.equals(p.normalize(previous.configPath), p.normalize(file.path));
+
+  bool _encryptedStateMatchesCulture(_EncryptedState state, String culture) {
+    final normalized = culture.toLowerCase();
+    final triplet = (
+      state.globalLanguage.toLowerCase(),
+      state.globalLocale.toLowerCase(),
+      state.gameLanguage.toLowerCase(),
+    );
+    return triplet == ('en', 'en', normalized) ||
+        triplet == (normalized, normalized, normalized);
   }
 
   Future<LanguageRestoreResult> _restoreHybrid(
@@ -278,7 +386,8 @@ class GameLanguageService {
     if (current == null || baseline == null) {
       return const LanguageRestoreResult(
         restored: false,
-        reason: 'O estado híbrido criptografado do NTE não pôde ser revalidado.',
+        reason:
+            'O estado híbrido criptografado do NTE não pôde ser revalidado.',
       );
     }
 
@@ -290,7 +399,8 @@ class GameLanguageService {
     );
     final expectedHybrid = ('en', 'en', requested);
     final expectedAfterGame = (requested, requested, requested);
-    if (currentTriplet != expectedHybrid && currentTriplet != expectedAfterGame) {
+    if (currentTriplet != expectedHybrid &&
+        currentTriplet != expectedAfterGame) {
       return const LanguageRestoreResult(
         restored: false,
         reason:
@@ -368,15 +478,33 @@ class GameLanguageService {
           preservedUserChoice: true,
         );
       }
-      if (detected.value.toLowerCase() != culture) {
+      final previousCulture = previous.requestedCulture.toLowerCase();
+      if (detected.value.toLowerCase() != previousCulture) {
         return LanguageSwitchResult(
           changed: false,
           receipt: previous,
-          reason: 'O usuário alterou o idioma depois da instalação.',
+          reason:
+              'O idioma foi alterado depois da instalação; a escolha atual foi preservada.',
           preservedUserChoice: true,
         );
       }
-      return LanguageSwitchResult(changed: false, receipt: previous);
+      if (previousCulture == culture) {
+        return LanguageSwitchResult(changed: false, receipt: previous);
+      }
+
+      final migrated = TextLanguageReceipt(
+        configPath: detected.file.path,
+        key: detected.key,
+        previousRawValue: previous.previousRawValue,
+        previousValue: previous.previousValue,
+        requestedCulture: culture,
+      );
+      await _replacePlainSetting(detected, culture);
+      return LanguageSwitchResult(
+        changed: true,
+        receipt: migrated,
+        migratedFromCulture: previousCulture,
+      );
     }
 
     if (detected == null) {
@@ -503,8 +631,7 @@ class GameLanguageService {
     if (languages.length != 2 || locales.length != 1) {
       return null;
     }
-    if (!(languages[0].$1 < locales[0].$1 &&
-        locales[0].$1 < languages[1].$1)) {
+    if (!(languages[0].$1 < locales[0].$1 && locales[0].$1 < languages[1].$1)) {
       return null;
     }
     return _EncryptedState(
@@ -607,9 +734,7 @@ class GameLanguageService {
     return _detectPlainFromFiles(_candidateFiles());
   }
 
-  Future<_DetectedSetting?> _detectPlainFromFiles(
-    Iterable<File> files,
-  ) async {
+  Future<_DetectedSetting?> _detectPlainFromFiles(Iterable<File> files) async {
     final candidates = <_DetectedSetting>[];
     for (final file in files) {
       if (!await file.exists()) {
@@ -820,10 +945,11 @@ class GameLanguageService {
         bytes[1] == 0xbb &&
         bytes[2] == 0xbf) {
       try {
-        return _Utf8Payload(
-          utf8.decode(bytes.sublist(3)),
-          const [0xef, 0xbb, 0xbf],
-        );
+        return _Utf8Payload(utf8.decode(bytes.sublist(3)), const [
+          0xef,
+          0xbb,
+          0xbf,
+        ]);
       } on FormatException {
         return null;
       }
@@ -951,11 +1077,7 @@ class GameLanguageService {
     await _writeAtomic(setting.file, current.bom, payload);
   }
 
-  Future<void> _writeAtomic(
-    File file,
-    List<int> bom,
-    List<int> payload,
-  ) async {
+  Future<void> _writeAtomic(File file, List<int> bom, List<int> payload) async {
     final temporary = File('${file.path}.nte-new');
     if (await temporary.exists()) {
       await temporary.delete();

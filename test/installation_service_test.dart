@@ -145,6 +145,81 @@ void main() {
   );
 
   test(
+    'updates a V1 French installation to a V2 Spanish slot atomically',
+    () async {
+      final configRoot = Directory(
+        p.join(
+          sandbox.path,
+          'local-app-data',
+          'HT',
+          'Saved_Global',
+          'Config',
+          'Windows',
+        ),
+      );
+      await configRoot.create(recursive: true);
+      final ini = File(p.join(configRoot.path, 'GameUserSettings.ini'));
+      await ini.writeAsString('[User]\nTextLanguage=en\nQuality=2\n');
+
+      final transitionService = InstallationService(
+        paths,
+        LauncherLog(paths.logFile),
+        integrity: FileIntegrityService(),
+        safePaths: SafePathService(),
+        receipts: receipts,
+        gameLanguage: GameLanguageService(
+          localAppData: p.join(sandbox.path, 'local-app-data'),
+        ),
+      );
+      final frenchManifest = testManifest(
+        contents: const [
+          [8, 8, 8],
+          [9, 9, 9, 9],
+        ],
+        hostedCulture: 'fr',
+        version: 'nte-auto-v1-fr',
+      );
+      final frenchStage = await createStage(sandbox, frenchManifest, const [
+        [8, 8, 8],
+        [9, 9, 9, 9],
+      ]);
+      await transitionService.install(frenchManifest, frenchStage, game.path);
+      expect(await ini.readAsString(), contains('TextLanguage=fr'));
+
+      final spanishManifest = testManifest(
+        contents: const [
+          [1, 2, 3],
+          [4, 5, 6, 7],
+        ],
+        hostedCulture: 'es',
+        version: 'nte-auto-v2-es',
+      );
+      final spanishStage = await createStage(
+        sandbox,
+        spanishManifest,
+        contents,
+      );
+
+      await transitionService.install(spanishManifest, spanishStage, game.path);
+      expect(await ini.readAsString(), contains('TextLanguage=es'));
+      final receipt = (await receipts.read(game.path)).receipt;
+      expect(receipt?.translationVersion, 'nte-auto-v2-es');
+      expect(receipt?.textLanguage?.requestedCulture, 'es');
+
+      final removal = await transitionService.uninstall(game.path);
+      expect(removal.complete, isTrue);
+      expect(await ini.readAsString(), contains('TextLanguage=en'));
+      expect(await ini.readAsString(), contains('Quality=2'));
+      expect(
+        await File(
+          p.join(game.path, spanishManifest.files.first.relativeDestination),
+        ).exists(),
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'legacy manifest without localization metadata does not touch language',
     () async {
       final configRoot = Directory(

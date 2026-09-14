@@ -316,7 +316,14 @@ class InstallationService {
             previous: previousReceipt?.textLanguage,
             gameDirectory: gameDirectory,
           );
-          if (languageSwitch.changed) {
+          if (languageSwitch.migratedFromCulture != null) {
+            await log.info(
+              'Migração da tradução hospedada no slot '
+              '${languageSwitch.migratedFromCulture} para '
+              '$installationCulture concluída na mesma transação; '
+              'o recibo anterior será substituído somente após a validação.',
+            );
+          } else if (languageSwitch.changed) {
             await log.info(
               'Idioma textual do NTE alterado automaticamente para '
               '$installationCulture.',
@@ -718,19 +725,18 @@ class InstallationService {
 
   static bool _isGameContainer(String relativePath) {
     final normalized = _portablePathKey(relativePath);
-    if (!normalized.startsWith(
-      'client/windowsnoeditor/ht/content/paks/',
-    )) {
+    if (!normalized.startsWith('client/windowsnoeditor/ht/content/paks/')) {
       return false;
     }
-    return const {'.pak', '.utoc', '.ucas'}.contains(
-      p.posix.extension(normalized),
-    );
+    return const {
+      '.pak',
+      '.utoc',
+      '.ucas',
+    }.contains(p.posix.extension(normalized));
   }
 
-  static String _portablePathKey(String relativePath) => p.posix
-      .normalize(relativePath.replaceAll('\\', '/'))
-      .toLowerCase();
+  static String _portablePathKey(String relativePath) =>
+      p.posix.normalize(relativePath.replaceAll('\\', '/')).toLowerCase();
 
   Future<void> _rollback(
     Directory transaction,

@@ -104,6 +104,52 @@ void main() {
     },
   );
 
+  test(
+    'marks a valid legacy French install outdated when V2 targets Spanish',
+    () async {
+      await _writeManifestFiles(game, manifest, contents);
+      final storage = await receipts.storageFor(game.path);
+      await _writeReceipt(
+        receipts,
+        game,
+        manifest,
+        contents,
+        textLanguage: TextLanguageReceipt(
+          configPath: p.join(sandbox.path, 'GameUserSettings.ini'),
+          key: 'TextLanguage',
+          previousRawValue: 'en',
+          previousValue: 'en',
+          requestedCulture: 'fr',
+        ),
+      );
+      final spanishManifest = TranslationManifest(
+        schemaVersion: manifest.schemaVersion,
+        translationVersion: manifest.translationVersion,
+        publishedAt: manifest.publishedAt,
+        gameBuildId: manifest.gameBuildId,
+        sourceHash: manifest.sourceHash,
+        localization: const TranslationLocalization(
+          sourceCulture: 'en',
+          installationCulture: 'es',
+          targetLanguage: 'pt-BR',
+          hostCompatible: true,
+          hostLocresSha256:
+              'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        ),
+        files: manifest.files,
+      );
+
+      final result = await verifier.verify(
+        loadedManifest: loaded(spanishManifest),
+        gameDirectory: game.path,
+      );
+
+      expect(result.status, TranslationInstallationStatus.installedOutdated);
+      expect(result.receiptVersion, manifest.translationVersion);
+      expect((await receipts.read(storage.gameDirectory)).receipt, isNotNull);
+    },
+  );
+
   test('reports not installed when no translation file exists', () async {
     final result = await verifier.verify(
       loadedManifest: loaded(manifest),
@@ -374,8 +420,9 @@ Future<void> _writeReceipt(
   ReceiptRepository receipts,
   Directory target,
   TranslationManifest value,
-  List<List<int>> bytes,
-) async {
+  List<List<int>> bytes, {
+  TextLanguageReceipt? textLanguage,
+}) async {
   final storage = await receipts.storageFor(target.path);
   await receipts.write(
     target.path,
@@ -385,6 +432,7 @@ Future<void> _writeReceipt(
       installedAt: DateTime.utc(2026, 7, 29),
       gameDirectory: storage.gameDirectory,
       manifestPublishedAt: value.publishedAt,
+      textLanguage: textLanguage,
       files: [
         for (var index = 0; index < value.files.length; index++)
           InstalledFileReceipt(

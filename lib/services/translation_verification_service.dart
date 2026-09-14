@@ -162,6 +162,25 @@ class TranslationVerificationService {
           installationCulture,
         );
       }
+      // A V1 installation can have exactly the same five managed files while
+      // still being hosted in the legacy French slot. Treat that as an
+      // update, even when the payload hashes/version happen to match, so the
+      // next explicit install can perform the safe fr -> es transition.
+      final receiptCulture = receipt?.textLanguage?.requestedCulture
+          .toLowerCase();
+      if (installationCulture != null &&
+          receiptCulture != null &&
+          receiptCulture != installationCulture.toLowerCase()) {
+        return _result(
+          TranslationInstallationStatus.installedOutdated,
+          receipt,
+          valid,
+          missing,
+          modified,
+          unverifiable,
+          detectedVersion: receipt?.translationVersion,
+        );
+      }
       return _result(
         TranslationInstallationStatus.installedCurrent,
         receipt,
