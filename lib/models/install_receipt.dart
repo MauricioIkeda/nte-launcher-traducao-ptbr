@@ -111,7 +111,7 @@ class TextLanguageReceipt {
       previousValue: _requiredString(json, 'previousValue'),
       requestedCulture: _requiredString(json, 'requestedCulture'),
     );
-    if (value.requestedCulture != 'fr' ||
+    if (!const {'fr', 'es'}.contains(value.requestedCulture) ||
         !RegExp(r'^[A-Za-z0-9_.-]+$').hasMatch(value.key)) {
       throw const ReceiptFormatException(
         'Metadados de idioma textual inválidos no recibo.',

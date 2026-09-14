@@ -172,7 +172,7 @@ class TranslationLocalization {
 
   void validate() {
     if (sourceCulture != 'en' ||
-        installationCulture != 'fr' ||
+        !const {'fr', 'es'}.contains(installationCulture) ||
         targetLanguage != 'pt-BR' ||
         !hostCompatible ||
         !RegExp(r'^[a-f0-9]{64}$').hasMatch(hostLocresSha256)) {

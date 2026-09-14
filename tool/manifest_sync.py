@@ -184,7 +184,7 @@ def validate_localization(value: Any) -> dict[str, Any]:
         data.get("installationCulture"), "localization.installationCulture"
     )
     target = _require_string(data.get("targetLanguage"), "localization.targetLanguage")
-    if source != "en" or installation != "fr" or target != "pt-BR":
+    if source != "en" or installation not in {"fr", "es"} or target != "pt-BR":
         raise ContractError("localization: contrato de culturas não autorizado.")
     if data.get("hostCompatible") is not True:
         raise ContractError("localization.hostCompatible: esperado true.")

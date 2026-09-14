@@ -64,18 +64,19 @@ class TranslationVerificationService {
     }
 
     final languageReceipt = receiptResult.receipt?.textLanguage;
-    if (manifest.localization?.installationCulture == 'fr' &&
-        languageReceipt?.requestedCulture == 'fr') {
+    final installationCulture = manifest.localization?.installationCulture;
+    if (installationCulture != null &&
+        languageReceipt?.requestedCulture == installationCulture) {
       try {
         final prepared = await gameLanguage.ensureCulture(
-          'fr',
+          installationCulture,
           previous: languageReceipt,
           gameDirectory: gameDirectory,
         );
         if (prepared.changed) {
           await log.info(
             'Cultura preparada: launcher oficial em inglês e jogo no slot '
-            'francês/PT-BR.',
+            '$installationCulture/PT-BR.',
           );
         }
       } catch (error, stackTrace) {
@@ -152,12 +153,13 @@ class TranslationVerificationService {
       );
     }
     if (valid.length == manifest.files.length) {
-      if (manifest.localization?.installationCulture == 'fr' &&
+      if (installationCulture != null &&
           receipt != null &&
           receipt.textLanguage == null) {
         receipt = await _migrateHostedLanguageReceipt(
           receipt,
           gameDirectory,
+          installationCulture,
         );
       }
       return _result(
@@ -287,16 +289,17 @@ class TranslationVerificationService {
   Future<InstallReceipt> _migrateHostedLanguageReceipt(
     InstallReceipt receipt,
     String gameDirectory,
+    String installationCulture,
   ) async {
     try {
       final prepared = await gameLanguage.ensureCulture(
-        'fr',
+        installationCulture,
         gameDirectory: gameDirectory,
       );
       final textLanguage = prepared.receipt;
       if (textLanguage == null) {
         await log.info(
-          'A instalação hospedada em fr foi detectada, mas a cultura não '
+          'A instalação hospedada em $installationCulture foi detectada, mas a cultura não '
           'pôde ser preparada automaticamente: '
           '${prepared.reason ?? 'motivo desconhecido'}.',
         );
@@ -317,7 +320,7 @@ class TranslationVerificationService {
       await receipts.write(gameDirectory, migrated);
       await log.info(
         'Instalação existente migrada para cultura hospedada: launcher '
-        'oficial em inglês e jogo no slot francês/PT-BR.',
+        'oficial em inglês e jogo no slot $installationCulture/PT-BR.',
       );
       return migrated;
     } catch (error, stackTrace) {

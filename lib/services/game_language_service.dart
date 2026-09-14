@@ -155,10 +155,11 @@ class GameLanguageService {
     TextLanguageReceipt? previous,
     String? gameDirectory,
   }) async {
-    if (culture != 'fr') {
-      return const LanguageSwitchResult(
+    final requestedCulture = culture.trim().toLowerCase();
+    if (!const {'fr', 'es'}.contains(requestedCulture)) {
+      return LanguageSwitchResult(
         changed: false,
-        reason: 'O launcher só permite o host de texto no slot fr.',
+        reason: 'O launcher só permite os slots de texto fr ou es.',
       );
     }
 
@@ -167,24 +168,24 @@ class GameLanguageService {
       previous: previous,
     );
     if (encrypted != null) {
-      final receipt = _hybridReceipt(encrypted, culture, previous);
+      final receipt = _hybridReceipt(encrypted, requestedCulture, previous);
       final changed =
           encrypted.globalLanguage.toLowerCase() != 'en' ||
           encrypted.globalLocale.toLowerCase() != 'en' ||
-          encrypted.gameLanguage.toLowerCase() != culture;
+          encrypted.gameLanguage.toLowerCase() != requestedCulture;
       if (changed) {
         await _writeEncryptedState(
           encrypted,
           globalLanguage: 'en',
           globalLocale: 'en',
-          gameLanguage: culture,
+          gameLanguage: requestedCulture,
         );
       }
       return LanguageSwitchResult(changed: changed, receipt: receipt);
     }
 
     return _ensurePlainCulture(
-      culture,
+      requestedCulture,
       previous: previous,
       gameDirectory: gameDirectory,
     );
@@ -387,7 +388,7 @@ class GameLanguageService {
     if (detected.value.toLowerCase() == culture) {
       return const LanguageSwitchResult(
         changed: false,
-        reason: 'O NTE já está usando o slot francês.',
+        reason: 'O NTE já está usando o slot de texto solicitado.',
       );
     }
 

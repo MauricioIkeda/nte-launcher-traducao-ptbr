@@ -63,6 +63,12 @@ class HostedLocalizationManifestTests(unittest.TestCase):
             },
         )
 
+    def test_spanish_host_slot_is_supported_for_v2_releases(self):
+        candidate = manifest(localization=True)
+        candidate["localization"]["installationCulture"] = "es"
+        result = validate_public_manifest(candidate)
+        self.assertEqual(result["localization"]["installationCulture"], "es")
+
     def test_unauthorized_localization_contract_is_rejected(self):
         candidate = manifest(localization=True)
         candidate["localization"]["installationCulture"] = "de"

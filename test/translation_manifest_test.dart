@@ -162,6 +162,19 @@ void main() {
     expect(manifest.localization?.targetLanguage, 'pt-BR');
   });
 
+  test('accepts Spanish host-culture metadata from Studio V2', () {
+    final json = _hostManifestJson();
+    json['localization'] = {
+      'sourceCulture': 'en',
+      'installationCulture': 'es',
+      'targetLanguage': 'pt-BR',
+      'hostCompatible': true,
+      'hostLocresSha256': 'e' * 64,
+    };
+    final manifest = TranslationManifest.fromJson(json);
+    expect(manifest.localization?.installationCulture, 'es');
+  });
+
   test('rejects unsupported host-culture metadata', () {
     final json = _hostManifestJson();
     json['localization'] = {
