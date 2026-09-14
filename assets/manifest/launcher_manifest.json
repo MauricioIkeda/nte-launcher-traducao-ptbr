@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.4",
-  "publishedAt": "2026-08-19T17:36:26Z",
+  "version": "1.4.7",
+  "publishedAt": "2026-09-04T13:21:17Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.4/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19556885,
-    "sha256": "ef9f84a32bbbab7df2fb2506a920c0a2df8cf7e36ba0570c721f98c7f6141109"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.7/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19604057,
+    "sha256": "4dbc69b8b630e1c946190b80fac10914dcd0713c25e56107bcf0dee64aae35aa"
   },
-  "releaseNotes": "Hotfix Steam/Epic: seleciona o perfil correto de idioma quando as duas instalações coexistem, garantindo que a tradução PT-BR hospedada no slot francês seja ativada automaticamente na instalação escolhida.",
-  "mandatory": true
+  "releaseNotes": "Melhora a compatibilidade da janela sob Wine/Proton e amplia o diagnóstico de inicialização no Linux.",
+  "mandatory": false
 }

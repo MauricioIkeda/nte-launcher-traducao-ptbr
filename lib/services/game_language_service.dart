@@ -155,6 +155,71 @@ class GameLanguageService {
     for (final entry in _encryptedLocaleLines.entries) entry.value: entry.key,
   };
 
+  Future<Map<String, Object?>> inspectReceiptState(
+    TextLanguageReceipt receipt,
+  ) async {
+    if (!_isAllowedConfigPath(receipt.configPath)) {
+      return const {'detected': false, 'reason': 'config_path_not_allowed'};
+    }
+    final file = File(receipt.configPath);
+    if (!await file.exists()) {
+      return const {'detected': false, 'reason': 'config_file_missing'};
+    }
+
+    final normalizedKey = _normalizeKey(receipt.key);
+    if (normalizedKey == _normalizeKey(_nteHybridKey) ||
+        normalizedKey == _normalizeKey(_nteEncryptedKey)) {
+      final state = await _detectEncryptedState(file);
+      if (state == null) {
+        return const {
+          'mode': 'encrypted',
+          'detected': false,
+          'reason': 'encrypted_language_layout_not_recognized',
+        };
+      }
+      final requested = receipt.requestedCulture.toLowerCase();
+      final currentTriplet = (
+        state.globalLanguage.toLowerCase(),
+        state.globalLocale.toLowerCase(),
+        state.gameLanguage.toLowerCase(),
+      );
+      final expectedHybrid = ('en', 'en', requested);
+      final expectedAfterGame = (requested, requested, requested);
+      return {
+        'mode': 'encrypted',
+        'detected': true,
+        'cultures': {
+          'globalLanguage': state.globalLanguage,
+          'globalLocale': state.globalLocale,
+          'gameLanguage': state.gameLanguage,
+        },
+        'matchesManagedExpectation':
+            currentTriplet == expectedHybrid ||
+            currentTriplet == expectedAfterGame,
+      };
+    }
+
+    final parsed = await _readIni(file);
+    final matches = parsed.settings
+        .where((setting) => _normalizeKey(setting.key) == normalizedKey)
+        .toList(growable: false);
+    if (matches.length != 1) {
+      return {
+        'mode': 'plain',
+        'detected': false,
+        'matchingKeyCount': matches.length,
+      };
+    }
+    final current = matches.single.value;
+    return {
+      'mode': 'plain',
+      'detected': true,
+      'currentCulture': current,
+      'matchesRequestedCulture':
+          current.toLowerCase() == receipt.requestedCulture.toLowerCase(),
+    };
+  }
+
   Future<LanguageSwitchResult> ensureCulture(
     String culture, {
     TextLanguageReceipt? previous,

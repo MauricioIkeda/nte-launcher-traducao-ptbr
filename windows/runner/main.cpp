@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "flutter_window.h"
+#include "native_window_diagnostics.h"
 #include "official_launcher_automation.h"
 #include "utils.h"
 
@@ -16,6 +17,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                 "--official-ready-play") != command_line_arguments.end()) {
     return RunOfficialLauncherAutomation(command_line_arguments);
   }
+
+  NativeWindowDiagnostics::Initialize(show_command);
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
@@ -30,6 +33,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   const std::wstring executable_directory = GetExecutableDirectory();
   if (executable_directory.empty() ||
       !::SetCurrentDirectoryW(executable_directory.c_str())) {
+    NativeWindowDiagnostics::Record("set_current_directory_failed");
     ::CoUninitialize();
     return EXIT_FAILURE;
   }
@@ -40,10 +44,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
+  NativeWindowDiagnostics::Record("window_create_requested");
   if (!window.Create(L"NTE Launcher Tradu\u00e7\u00e3o PT-BR", origin, size)) {
+    NativeWindowDiagnostics::Record("window_create_failed", window.GetHandle());
+    ::CoUninitialize();
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
+  NativeWindowDiagnostics::Record("window_create_completed", window.GetHandle());
 
   ::MSG msg;
   while (::GetMessage(&msg, nullptr, 0, 0)) {
@@ -51,6 +59,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  NativeWindowDiagnostics::Record("message_loop_exited", window.GetHandle());
   ::CoUninitialize();
   return EXIT_SUCCESS;
 }

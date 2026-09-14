@@ -128,26 +128,35 @@ void main() {
     },
   );
 
-  test('does not migrate partially restored game files', () async {
-    final relative = safePaths.normalizeRelative(
-      manifest.files.first.relativeDestination,
-    );
-    await paths.root.create(recursive: true);
-    await paths.installReceipt.writeAsString(
-      jsonEncode({
-        'version': manifest.translationVersion,
-        'gameDirectory': game.path,
-        'installedFiles': [relative],
-        'originalsExisted': {relative: false},
-      }),
-    );
-    final migrated = await migration.migrateWhenProvable(
-      gameDirectory: game.path,
-      loadedManifest: loaded(manifest),
-    );
-    expect(migrated, isFalse);
-    expect((await receipts.read(game.path)).receipt, isNull);
-  });
+  test(
+    'migrates a partially restored legacy install so it remains repairable',
+    () async {
+      final asset = manifest.files.first;
+      final relative = safePaths.normalizeRelative(asset.relativeDestination);
+      await paths.root.create(recursive: true);
+      await paths.installReceipt.writeAsString(
+        jsonEncode({
+          'version': manifest.translationVersion,
+          'gameDirectory': game.path,
+          'installedFiles': [relative],
+          'originalsExisted': {relative: false},
+        }),
+      );
+
+      final migrated = await migration.migrateWhenProvable(
+        gameDirectory: game.path,
+        loadedManifest: loaded(manifest),
+      );
+      final receipt = (await receipts.read(game.path)).receipt;
+
+      expect(migrated, isTrue);
+      expect(receipt?.translationVersion, manifest.translationVersion);
+      expect(receipt?.files.single.relativePath, relative);
+      expect(receipt?.files.single.installedSize, asset.size);
+      expect(receipt?.files.single.installedSha256, asset.sha256);
+      expect(receipt?.files.single.originalExisted, isFalse);
+    },
+  );
 
   test('invalid legacy JSON is preserved without deletion', () async {
     await paths.root.create(recursive: true);

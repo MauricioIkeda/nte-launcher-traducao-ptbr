@@ -171,6 +171,16 @@ void main() {
       expect(current, isNot(contains(localeFr)));
       expect(current, contains(audioEn));
 
+      final inspection = await service.inspectReceiptState(result.receipt!);
+      expect(inspection['mode'], 'encrypted');
+      expect(inspection['detected'], isTrue);
+      expect(inspection['matchesManagedExpectation'], isTrue);
+      expect(inspection['cultures'], {
+        'globalLanguage': 'en',
+        'globalLocale': 'en',
+        'gameLanguage': 'fr',
+      });
+
       final restored = await service.restore(result.receipt);
       expect(restored.restored, isTrue);
       final original = await ini.readAsString();

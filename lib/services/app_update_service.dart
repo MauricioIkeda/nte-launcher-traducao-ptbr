@@ -17,9 +17,16 @@ class AppUpdateService {
     this.log, {
     String? manifestUrl,
     String? currentVersion,
+    bool? releaseCandidate,
     FileIntegrityService? integrity,
   }) : _manifestUrl = manifestUrl ?? _defaultManifestUrl,
        _currentVersionOverride = currentVersion,
+       _releaseCandidate =
+           releaseCandidate ??
+           const bool.fromEnvironment(
+             'NTE_RELEASE_CANDIDATE',
+             defaultValue: false,
+           ),
        integrity = integrity ?? FileIntegrityService();
 
   static const _defaultManifestUrl = String.fromEnvironment(
@@ -34,11 +41,20 @@ class AppUpdateService {
   final LauncherLog log;
   final String _manifestUrl;
   final String? _currentVersionOverride;
+  final bool _releaseCandidate;
   final FileIntegrityService integrity;
 
   Future<String> currentVersion() async {
     return _currentVersionOverride ??
         (await PackageInfo.fromPlatform()).version;
+  }
+
+  bool isUpdateAvailable(
+    AppUpdateManifest manifest,
+    String currentVersion,
+  ) {
+    return manifest.isNewerThan(currentVersion) ||
+        (_releaseCandidate && manifest.version == currentVersion);
   }
 
   Future<AppUpdateManifest?> check() async {
@@ -85,9 +101,10 @@ class AppUpdateService {
       );
       await log.info(
         'Versão do launcher: instalada=$current, '
-        'disponível=${manifest.version}.',
+        'disponível=${manifest.version}, '
+        'releaseCandidate=$_releaseCandidate.',
       );
-      return manifest.isNewerThan(current) ? manifest : null;
+      return isUpdateAvailable(manifest, current) ? manifest : null;
     } finally {
       client.close(force: true);
     }
