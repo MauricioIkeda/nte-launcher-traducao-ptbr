@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.8",
-  "publishedAt": "2026-09-14T23:40:26Z",
+  "version": "1.4.9",
+  "publishedAt": "2026-09-15T00:15:17Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.8/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19607454,
-    "sha256": "a5ffb99348740cf10f0031848a2bfa012af39dc15b97939c0129fbb069c2c886"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.9/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19608210,
+    "sha256": "cbc675413c4a09cb2f6464d24f24fd1983c6b302f659b9e3cff1e0b9b23d7e69"
   },
-  "releaseNotes": "Transição do Studio V2 para o slot espanhol e migração segura de instalações legadas.",
+  "releaseNotes": "Corrige a migração da instalação V1 no slot francês para o slot espanhol do Studio V2.",
   "mandatory": true
 }
