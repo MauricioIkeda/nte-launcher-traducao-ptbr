@@ -238,6 +238,40 @@ void main() {
   });
 
   test(
+    'repairs a V1 receipt when the requested Spanish state is already present',
+    () async {
+      const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';
+      const languageFr = 'Lm88wdHSFnR2x5z6Z1s5umymGOWDheFjSanKLCRlfZ4=';
+      const languageEs = 'nDVC6GjSxzk1HCELSNSNV2ymGOWDheFjSanKLCRlfZ4=';
+      const localeEn = 'de0DvvQ7z4UvvV6EWBKSQAl+l+fR2Cyd408uYnmPbXw=';
+      const localeFr = 'NeXLYGL6ZN14QCC1BFkXxgl+l+fR2Cyd408uYnmPbXw=';
+      const localeEs = 'U7ww0XObGiKxLTqDkHKbSQl+l+fR2Cyd408uYnmPbXw=';
+
+      await ini.writeAsString('$languageEn\r\n$localeEn\r\n$languageEn\r\n');
+      final french = await service.ensureCulture('fr');
+      expect(french.receipt?.requestedCulture, 'fr');
+
+      // Simulate a V2 retry after its files were installed and the game (or a
+      // previous attempt) had already selected the Spanish host slot.  The
+      // receipt still refers to the V1 French slot.
+      await ini.writeAsString('$languageEs\r\n$localeEs\r\n$languageEs\r\n');
+      final spanish = await service.ensureCulture(
+        'es',
+        previous: french.receipt,
+      );
+
+      expect(spanish.changed, isTrue);
+      expect(spanish.migratedFromCulture, 'fr');
+      expect(spanish.preservedUserChoice, isFalse);
+      expect(spanish.receipt?.requestedCulture, 'es');
+      expect(await ini.readAsString(), contains(languageEs));
+      expect(await ini.readAsString(), contains(localeEn));
+      expect(await ini.readAsString(), isNot(contains(languageFr)));
+      expect(await ini.readAsString(), isNot(contains(localeFr)));
+    },
+  );
+
+  test(
     'does not migrate encrypted slot after a manual language change',
     () async {
       const languageEn = 'zUs1iPOD6DH9WVA/j/WFQGymGOWDheFjSanKLCRlfZ4=';

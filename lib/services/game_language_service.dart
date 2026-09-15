@@ -325,6 +325,34 @@ class GameLanguageService {
       final key = _normalizeKey(previous.key);
       final previousCulture = previous.requestedCulture.toLowerCase();
       final managed = _encryptedStateMatchesCulture(current, previousCulture);
+
+      // A V1 -> V2 update can be retried after the target slot was already
+      // selected (for example, a previous installation wrote the Spanish
+      // files but failed before the receipt was rewritten).  In that case
+      // the current state is not a user override: it is exactly the culture
+      // this operation is asking for.  Rebuild the managed receipt and let
+      // the normal transition below put the launcher/game into the expected
+      // hybrid state.  Without this branch, every retry was treated as a
+      // manual language change and the old French receipt survived forever,
+      // making post-install verification return installedOutdated.
+      if (!managed && _encryptedStateMatchesCulture(current, culture)) {
+        final baseline = _encryptedBaselineFromReceipt(previous);
+        if (baseline != null) {
+          return (
+            receipt: _hybridReceiptFromBaseline(
+              current.file,
+              culture,
+              baseline,
+            ),
+            preserveUserChoice: false,
+            reason: null,
+            migratedFromCulture: previousCulture == culture
+                ? null
+                : previousCulture,
+          );
+        }
+      }
+
       if (!managed) {
         return (
           receipt: previous,
