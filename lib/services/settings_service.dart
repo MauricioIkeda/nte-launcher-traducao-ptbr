@@ -32,11 +32,10 @@ abstract interface class LauncherSettings {
 
 class SettingsService implements LauncherSettings {
   SettingsService({
-    LauncherLog? log,
+    this.log,
     File? preferencesFile,
     DateTime Function()? now,
-  }) : _log = log,
-       _fixedPreferencesFile = preferencesFile,
+  }) : _fixedPreferencesFile = preferencesFile,
        _now = now ?? DateTime.now;
 
   static const _gameDirectoryKey = 'game_directory';
@@ -46,7 +45,7 @@ class SettingsService implements LauncherSettings {
   static const _officialLaunchAutomationKey = 'official_launch_automation_v2';
   static const _preferencesFileName = 'shared_preferences.json';
 
-  final LauncherLog? _log;
+  final LauncherLog? log;
   final File? _fixedPreferencesFile;
   final DateTime Function() _now;
 
@@ -122,7 +121,7 @@ class SettingsService implements LauncherSettings {
       await _writePreferences(preferences);
       _cache = preferences;
     });
-    _mutationQueue = operation.then<void>((_) {}, onError: (_, __) {});
+    _mutationQueue = operation.then<void>((_) {}, onError: (_, _) {});
     return operation;
   }
 
@@ -136,7 +135,7 @@ class SettingsService implements LauncherSettings {
     if (!await file.exists() && await backup.exists()) {
       try {
         await backup.rename(file.path);
-        await _log?.info(
+        await log?.info(
           'Preferências locais restauradas após escrita interrompida.',
         );
       } catch (_) {
@@ -161,7 +160,7 @@ class SettingsService implements LauncherSettings {
           final recovered = await _decodePreferences(backup);
           await _quarantine(file, 'corrupt');
           await backup.rename(file.path);
-          await _log?.error(
+          await log?.error(
             'Preferências locais corrompidas; backup íntegro restaurado.',
             error: error,
             stackTrace: stackTrace,
@@ -173,7 +172,7 @@ class SettingsService implements LauncherSettings {
       }
 
       await _quarantine(file, 'corrupt');
-      await _log?.error(
+      await log?.error(
         'Preferências locais corrompidas; configurações foram reiniciadas.',
         error: error,
         stackTrace: stackTrace,
@@ -210,7 +209,7 @@ class SettingsService implements LauncherSettings {
     final file = await _preferencesFile();
     await file.parent.create(recursive: true);
 
-    final suffix = '${pid}.${_now().toUtc().microsecondsSinceEpoch}';
+    final suffix = '$pid.${_now().toUtc().microsecondsSinceEpoch}';
     final temporary = File('${file.path}.tmp.$suffix');
     final backup = File('${file.path}.bak');
     await temporary.writeAsString(jsonEncode(preferences), flush: true);
