@@ -13,6 +13,7 @@ namespace {
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\{81100993-B692-4FCC-BA9D-0A1DC3A9C33E}-NTE-Launcher-PTBR";
 constexpr wchar_t kLauncherWindowTitle[] = L"NTE Launcher Tradução PT-BR";
+constexpr DWORD kInstallHandoffTimeoutMs = 15000;
 
 void ActivateExistingLauncherWindow() {
   HWND window = ::FindWindowW(nullptr, kLauncherWindowTitle);
@@ -37,13 +38,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return RunOfficialLauncherAutomation(command_line_arguments);
   }
 
+  const bool elevated_install =
+      std::find(command_line_arguments.begin(), command_line_arguments.end(),
+                "--install") != command_line_arguments.end();
   HANDLE single_instance_mutex =
       ::CreateMutexW(nullptr, TRUE, kSingleInstanceMutexName);
   if (single_instance_mutex != nullptr &&
       ::GetLastError() == ERROR_ALREADY_EXISTS) {
-    ActivateExistingLauncherWindow();
-    ::CloseHandle(single_instance_mutex);
-    return EXIT_SUCCESS;
+    if (elevated_install) {
+      const DWORD wait_result =
+          ::WaitForSingleObject(single_instance_mutex, kInstallHandoffTimeoutMs);
+      if (wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED) {
+        ::CloseHandle(single_instance_mutex);
+        return EXIT_FAILURE;
+      }
+    } else {
+      ActivateExistingLauncherWindow();
+      ::CloseHandle(single_instance_mutex);
+      return EXIT_SUCCESS;
+    }
   }
 
   NativeWindowDiagnostics::Initialize(show_command);
