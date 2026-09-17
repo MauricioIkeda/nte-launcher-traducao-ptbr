@@ -145,7 +145,7 @@ Future<LauncherController> _initializeLauncher(List<String> arguments) async {
       elevation: elevation,
       gamePlatforms: GamePlatformService(),
       installer: installer,
-      settings: SettingsService(),
+      settings: SettingsService(log: log),
       verifier: verifier,
       migration: LegacyMigrationService(
         paths: paths,

@@ -36,6 +36,7 @@ class ManifestRepository {
   final LauncherLog log;
   final String _remoteManifestUrl;
   final RemoteManifestDownloader? remoteManifestDownloader;
+  Future<void> _cacheWriteQueue = Future<void>.value();
 
   Future<LoadedTranslationManifest?> load() async {
     if (_remoteManifestUrl.isNotEmpty) {
@@ -155,14 +156,33 @@ class ManifestRepository {
     }
   }
 
-  Future<void> _writeCache(String source) async {
+  Future<void> _writeCache(String source) {
+    final operation = _cacheWriteQueue.then(
+      (_) => _writeCacheNow(source),
+    );
+    _cacheWriteQueue = operation.then<void>((_) {}, onError: (_, _) {});
+    return operation;
+  }
+
+  Future<void> _writeCacheNow(String source) async {
     await paths.cache.create(recursive: true);
-    final temporary = File('${paths.cachedManifest.path}.tmp');
-    await temporary.writeAsString(source, flush: true);
-    if (await paths.cachedManifest.exists()) {
-      await paths.cachedManifest.delete();
+    final suffix = '$pid.${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    final temporary = File('${paths.cachedManifest.path}.tmp.$suffix');
+    try {
+      await temporary.writeAsString(source, flush: true);
+      if (await paths.cachedManifest.exists()) {
+        await paths.cachedManifest.delete();
+      }
+      await temporary.rename(paths.cachedManifest.path);
+    } finally {
+      if (await temporary.exists()) {
+        try {
+          await temporary.delete();
+        } catch (_) {
+          // Temporary cache files are uniquely named and safe to leave behind.
+        }
+      }
     }
-    await temporary.rename(paths.cachedManifest.path);
   }
 
   TranslationManifest _decode(String source) {
