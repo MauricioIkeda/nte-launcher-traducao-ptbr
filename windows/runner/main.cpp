@@ -12,7 +12,8 @@
 namespace {
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\{81100993-B692-4FCC-BA9D-0A1DC3A9C33E}-NTE-Launcher-PTBR";
-constexpr wchar_t kLauncherWindowTitle[] = L"NTE Launcher Tradução PT-BR";
+constexpr wchar_t kLauncherWindowTitle[] =
+    L"NTE Launcher Tradu\u00e7\u00e3o PT-BR";
 constexpr DWORD kInstallHandoffTimeoutMs = 15000;
 
 void ActivateExistingLauncherWindow() {
