@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -58,6 +59,49 @@ void main() {
     expect(requestedUri?.queryParameters['channel'], 'stable');
     expect(requestedUri?.queryParameters['_nte_cache_bust'], isNotEmpty);
     expect(await paths.cachedManifest.readAsString(), source);
+  });
+
+  test('serializes concurrent remote cache writes', () async {
+    final paths = AppPaths.forTesting(sandbox);
+    final source = jsonEncode({
+      'schemaVersion': 1,
+      'translationVersion': 'nte-auto-concurrent-test',
+      'publishedAt': '2026-09-17T01:02:03Z',
+      'files': [
+        {
+          'name': 'translation.pak',
+          'relativeDestination': 'Client/Content/Paks/translation.pak',
+          'url': 'https://github.com/example/releases/translation.pak',
+          'size': 42,
+          'sha256': 'a' * 64,
+        },
+      ],
+    });
+    final bothRequestsStarted = Completer<void>();
+    var requestCount = 0;
+    final repository = ManifestRepository(
+      paths,
+      LauncherLog(paths.logFile),
+      remoteManifestUrl: 'https://example.com/manifest.json',
+      remoteManifestDownloader: (_) async {
+        requestCount++;
+        if (requestCount == 2) {
+          bothRequestsStarted.complete();
+        }
+        await bothRequestsStarted.future;
+        return source;
+      },
+    );
+
+    final results = await Future.wait([repository.load(), repository.load()]);
+
+    expect(results.map((result) => result?.source.name), everyElement('remote'));
+    expect(await paths.cachedManifest.readAsString(), source);
+    final temporaryFiles = paths.cache
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.contains('.tmp.'));
+    expect(temporaryFiles, isEmpty);
   });
 
   test('reports cache as offline source when remote request fails', () async {
