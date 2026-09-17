@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.10",
-  "publishedAt": "2026-09-17T02:45:54Z",
+  "version": "1.4.11",
+  "publishedAt": "2026-09-17T05:47:30Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.10/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19608066,
-    "sha256": "8a5a21925306b942c2b950a9388c84df8efb5515c21ee00ce7602aacf897b2c4"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.11/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19607150,
+    "sha256": "1b7d8725b10f6a87bcb659c479872d95f3262cd69d1039e3be1b005d4c3cc789"
   },
-  "releaseNotes": "Corrige corrupção de preferências causada por múltiplas instâncias e adiciona recuperação automática do launcher.",
+  "releaseNotes": "Corrige a acentuação do título da janela do launcher e mantém a identificação correta da instância única.",
   "mandatory": false
 }
