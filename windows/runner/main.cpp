@@ -9,6 +9,25 @@
 #include "official_launcher_automation.h"
 #include "utils.h"
 
+namespace {
+constexpr wchar_t kSingleInstanceMutexName[] =
+    L"Local\\{81100993-B692-4FCC-BA9D-0A1DC3A9C33E}-NTE-Launcher-PTBR";
+constexpr wchar_t kLauncherWindowTitle[] = L"NTE Launcher Tradução PT-BR";
+
+void ActivateExistingLauncherWindow() {
+  HWND window = ::FindWindowW(nullptr, kLauncherWindowTitle);
+  if (window == nullptr) {
+    return;
+  }
+  if (::IsIconic(window)) {
+    ::ShowWindow(window, SW_RESTORE);
+  } else {
+    ::ShowWindow(window, SW_SHOW);
+  }
+  ::SetForegroundWindow(window);
+}
+}  // namespace
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   std::vector<std::string> command_line_arguments =
@@ -16,6 +35,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (std::find(command_line_arguments.begin(), command_line_arguments.end(),
                 "--official-ready-play") != command_line_arguments.end()) {
     return RunOfficialLauncherAutomation(command_line_arguments);
+  }
+
+  HANDLE single_instance_mutex =
+      ::CreateMutexW(nullptr, TRUE, kSingleInstanceMutexName);
+  if (single_instance_mutex != nullptr &&
+      ::GetLastError() == ERROR_ALREADY_EXISTS) {
+    ActivateExistingLauncherWindow();
+    ::CloseHandle(single_instance_mutex);
+    return EXIT_SUCCESS;
   }
 
   NativeWindowDiagnostics::Initialize(show_command);
@@ -35,6 +63,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       !::SetCurrentDirectoryW(executable_directory.c_str())) {
     NativeWindowDiagnostics::Record("set_current_directory_failed");
     ::CoUninitialize();
+    if (single_instance_mutex != nullptr) {
+      ::CloseHandle(single_instance_mutex);
+    }
     return EXIT_FAILURE;
   }
   flutter::DartProject project(executable_directory + L"\\data");
@@ -45,9 +76,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   NativeWindowDiagnostics::Record("window_create_requested");
-  if (!window.Create(L"NTE Launcher Tradu\u00e7\u00e3o PT-BR", origin, size)) {
+  if (!window.Create(kLauncherWindowTitle, origin, size)) {
     NativeWindowDiagnostics::Record("window_create_failed", window.GetHandle());
     ::CoUninitialize();
+    if (single_instance_mutex != nullptr) {
+      ::CloseHandle(single_instance_mutex);
+    }
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
@@ -61,5 +95,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   NativeWindowDiagnostics::Record("message_loop_exited", window.GetHandle());
   ::CoUninitialize();
+  if (single_instance_mutex != nullptr) {
+    ::CloseHandle(single_instance_mutex);
+  }
   return EXIT_SUCCESS;
 }
