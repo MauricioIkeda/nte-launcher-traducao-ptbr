@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.9",
-  "publishedAt": "2026-09-15T00:15:17Z",
+  "version": "1.4.10",
+  "publishedAt": "2026-09-17T02:45:54Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.9/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19608210,
-    "sha256": "cbc675413c4a09cb2f6464d24f24fd1983c6b302f659b9e3cff1e0b9b23d7e69"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.10/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19608066,
+    "sha256": "8a5a21925306b942c2b950a9388c84df8efb5515c21ee00ce7602aacf897b2c4"
   },
-  "releaseNotes": "Corrige a migração da instalação V1 no slot francês para o slot espanhol do Studio V2.",
-  "mandatory": true
+  "releaseNotes": "Corrige corrupção de preferências causada por múltiplas instâncias e adiciona recuperação automática do launcher.",
+  "mandatory": false
 }
