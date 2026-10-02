@@ -488,6 +488,39 @@ void main() {
   });
 
   test(
+    'blocked removal explains foreign installation without removing companions',
+    () async {
+      final manifest = testManifest(contents: contents);
+      final stage = await createStage(sandbox, manifest, contents);
+      await harness.installer.install(manifest, stage, game.path);
+      final changed = File(
+        p.join(game.path, manifest.files.first.relativeDestination),
+      );
+      await changed.writeAsBytes([99, 99, 99]);
+      final controller = harness.controller(
+        manifest: manifest,
+        contents: contents,
+        settings: _FakeSettings(game.path),
+      );
+      await controller.initialize();
+      await controller.removeTranslation();
+      expect(controller.status, LauncherStatus.error);
+      expect(
+        controller.errorMessage,
+        contains('Remoção bloqueada antes de alterar arquivos'),
+      );
+      expect(controller.errorMessage, contains('Studio'));
+      expect(await changed.readAsBytes(), [99, 99, 99]);
+      expect(
+        await File(
+          p.join(game.path, manifest.files.last.relativeDestination),
+        ).readAsBytes(),
+        contents.last,
+      );
+    },
+  );
+
+  test(
     'download blocks conflicting install, removal and launch clicks',
     () async {
       final downloads = _FakeDownloadService(paths, log, contents, pause: true);

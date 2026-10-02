@@ -687,9 +687,12 @@ class LauncherController extends ChangeNotifier {
       final result = await installer.uninstall(directory);
       if (!result.complete) {
         throw InstallationException(
-          'Remoção parcial. Arquivos modificados preservados: '
+          '${result.restoredFiles.isEmpty ? 'Remoção bloqueada antes de alterar arquivos.' : 'Remoção parcial.'} '
+          'Arquivos modificados preservados: '
           '${result.preservedModifiedFiles.length}; falhas: '
-          '${result.failedFiles.length}. Recibo e backups foram mantidos.',
+          '${result.failedFiles.length}. Recibo e backups foram mantidos. '
+          'Se instalou uma tradução de teste pelo Studio ou outro gerenciador, '
+          'desfaça primeiro essa instalação nele. Não apague arquivos manualmente.',
         );
       }
       await settings.clearInstalledVersion();

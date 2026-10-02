@@ -122,6 +122,85 @@ void main() {
     expect((await receipts.read(game.path)).receipt, isNotNull);
   });
 
+  test(
+    'repair accepts a receipt-owned container already matching the target release',
+    () async {
+      const oldBytes = [1, 2, 3];
+      const targetBytes = [4, 5, 6, 7];
+      final old = _containerManifest('pakchunk999-Windows_999_P.pak', oldBytes);
+      final target = _containerManifest(
+        'pakchunk999-Windows_999_P.pak',
+        targetBytes,
+      );
+      final oldStage = await createStage(sandbox, old, const [oldBytes]);
+      await service.install(old, oldStage, game.path);
+      final destination = File(
+        p.join(game.path, target.files.single.relativeDestination),
+      );
+      await destination.writeAsBytes(targetBytes);
+      final targetStage = await createStage(sandbox, target, const [
+        targetBytes,
+      ]);
+      await service.install(target, targetStage, game.path);
+      expect(await destination.readAsBytes(), targetBytes);
+      final receipt = (await receipts.read(game.path)).receipt!;
+      expect(receipt.files.single.installedSha256, hashOf(targetBytes));
+      expect(receipt.files.single.originalExisted, isFalse);
+    },
+  );
+
+  test(
+    'changed container blocks removal before deleting any companion file',
+    () async {
+      const contents = [
+        [1, 2, 3],
+        [4, 5, 6],
+      ];
+      final manifest = TranslationManifest.fromJson({
+        'schemaVersion': 1,
+        'translationVersion': 'fixture-removal-preflight',
+        'publishedAt': '2026-10-02T00:00:00Z',
+        'files': [
+          {
+            'name': 'pakchunk999-Windows_999_P.pak',
+            'relativeDestination':
+                'Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.pak',
+            'url': 'https://example.com/payload.pak',
+            'size': 3,
+            'sha256': hashOf(contents[0]),
+          },
+          {
+            'name': 'version.dll',
+            'relativeDestination':
+                'Client/WindowsNoEditor/HT/Binaries/Win64/version.dll',
+            'url': 'https://example.com/version.dll',
+            'size': 3,
+            'sha256': hashOf(contents[1]),
+          },
+        ],
+      });
+      final stage = await createStage(sandbox, manifest, contents);
+      await service.install(manifest, stage, game.path);
+      final pak = File(
+        p.join(game.path, manifest.files.first.relativeDestination),
+      );
+      await pak.writeAsBytes([9, 9, 9]);
+      final storage = await receipts.storageFor(game.path);
+      final receiptBefore = await storage.receipt.readAsString();
+      final removal = await service.uninstall(game.path);
+      expect(removal.complete, isFalse);
+      expect(removal.restoredFiles, isEmpty);
+      expect(await pak.readAsBytes(), [9, 9, 9]);
+      expect(
+        await File(
+          p.join(game.path, manifest.files.last.relativeDestination),
+        ).readAsBytes(),
+        contents[1],
+      );
+      expect(await storage.receipt.readAsString(), receiptBefore);
+    },
+  );
+
   test('does not block a pak outside the NTE Paks directory', () async {
     const translated = [1, 2, 3];
     const original = [7, 7, 7, 7];

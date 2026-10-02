@@ -18,6 +18,25 @@ Para erros ou sugestões de tradução, não é necessário exportar o diagnóst
 Informe o texto atual, a sugestão, o contexto e, se possível, uma captura de
 tela.
 
+## Tradução de teste do Studio e instalação pública
+
+Os dois gerenciadores usam os mesmos cinco destinos. Se instalar um build de
+teste sobre uma tradução do launcher, desfaça **primeiro o teste no Studio**;
+ele restaura a instalação pública anterior. Só depois repare, atualize ou remova
+no launcher. Não remova pelo launcher enquanto o teste ainda estiver ativo.
+
+O reparo não deve adivinhar a origem de um PAK/UTOC/UCAS diferente. Arquivos
+sem propriedade comprovada continuam bloqueados para proteger o jogo. Um
+contêiner já registrado que corresponda exatamente ao novo payload público
+pode ser reconciliado com segurança; isso não libera arquivos desconhecidos.
+
+A remoção agora confere o conjunto completo e os backups antes de escrever:
+um conflito conhecido bloqueia sem apagar os outros arquivos nem reduzir o
+recibo. Falhas de I/O ou alterações externas durante a execução ainda exigem
+diagnóstico; não há promessa de atomicidade do filesystem entre gerenciadores.
+O botão informa quando a remoção foi bloqueada antes de começar, em vez de
+chamar todo conflito de “remoção parcial”.
+
 ## O launcher abriu, mas a janela não apareceu
 
 O launcher não minimiza para a bandeja. A partir da versão 1.3.6, ele mostra

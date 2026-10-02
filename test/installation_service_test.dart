@@ -419,6 +419,8 @@ void main() {
       p.join(game.path, manifest.files.first.relativeDestination),
     );
     await modified.writeAsBytes([7, 7, 7]);
+    final storage = await receipts.storageFor(game.path);
+    final receiptBefore = await storage.receipt.readAsString();
 
     final result = await service.uninstall(game.path);
 
@@ -429,9 +431,17 @@ void main() {
     );
     expect(await modified.readAsBytes(), [7, 7, 7]);
     expect((await receipts.read(game.path)).receipt, isNotNull);
+    expect(result.restoredFiles, isEmpty);
+    expect(await storage.receipt.readAsString(), receiptBefore);
+    expect(
+      await File(
+        p.join(game.path, manifest.files.last.relativeDestination),
+      ).readAsBytes(),
+      contents.last,
+    );
   });
 
-  test('missing backup causes partial removal and keeps diagnostics', () async {
+  test('missing backup blocks removal before changing any payload', () async {
     final destination = File(
       p.join(game.path, manifest.files.first.relativeDestination),
     );
@@ -451,6 +461,14 @@ void main() {
       contains(p.joinAll(manifest.files.first.relativeDestination.split('/'))),
     );
     expect(await storage.receipt.exists(), isTrue);
+    expect(result.restoredFiles, isEmpty);
+    expect(await destination.readAsBytes(), contents.first);
+    expect(
+      await File(
+        p.join(game.path, manifest.files.last.relativeDestination),
+      ).readAsBytes(),
+      contents.last,
+    );
   });
 
   test('receipt from another directory cannot remove current files', () async {

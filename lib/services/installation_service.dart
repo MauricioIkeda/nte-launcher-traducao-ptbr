@@ -424,6 +424,59 @@ class InstallationService {
       final restored = <String>[];
       final preserved = <String>[];
       final failed = <String>[];
+      // Plan the complete removal before touching any payload. A foreign
+      // installer (e.g. a Studio test build) must not leave a half-uninstalled
+      // set merely because the changed container was encountered last.
+      for (final entry in receipt.files) {
+        try {
+          final destination = await safePaths.resolveFile(
+            gameDirectory,
+            entry.relativePath,
+          );
+          final current = await integrity.startOperation().verify(
+            file: destination,
+            expectedSize: entry.installedSize,
+            expectedSha256: entry.installedSha256,
+          );
+          if (!current.isValid &&
+              current.status != FileIntegrityStatus.missing) {
+            preserved.add(entry.relativePath);
+            continue;
+          }
+          if (entry.originalExisted) {
+            final original = await safePaths.resolveFile(
+              storage.originals.path,
+              entry.relativePath,
+            );
+            final backup = await integrity.startOperation().verify(
+              file: original,
+              expectedSize: entry.originalSize!,
+              expectedSha256: entry.originalSha256!,
+            );
+            if (!backup.isValid) failed.add(entry.relativePath);
+          }
+        } catch (error, stackTrace) {
+          failed.add(entry.relativePath);
+          await log.error(
+            'Preflight de remoção falhou para ${entry.relativePath}.',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      }
+      if (preserved.isNotEmpty || failed.isNotEmpty) {
+        await log.info(
+          'Remoção bloqueada antes de alterar arquivos: '
+          '${preserved.length} modificados e ${failed.length} backups/paths inválidos. '
+          'O conjunto, o recibo e os backups foram preservados.',
+        );
+        return RemovalResult(
+          complete: false,
+          restoredFiles: const [],
+          preservedModifiedFiles: preserved,
+          failedFiles: failed,
+        );
+      }
       for (final entry in receipt.files.reversed) {
         try {
           final destination = await safePaths.resolveFile(
@@ -685,8 +738,8 @@ class InstallationService {
       final previous = previousByPath[_portablePathKey(relative)];
       final destination = await safePaths.resolveFile(gameDirectory, relative);
       if (previous != null) {
-        // Um arquivo gerenciado só continua pertencendo à tradução enquanto o
-        // conteúdo no disco ainda for exatamente o que o recibo instalou. Uma
+        // Um arquivo gerenciado deve corresponder ao recibo ou ao payload
+        // público exato que será instalado. Uma
         // atualização do NTE pode passar a ocupar o mesmo caminho depois da
         // primeira instalação; nesse caso jamais sobrescrevemos o novo nativo.
         if (previous.originalExisted) {
@@ -702,7 +755,12 @@ class InstallationService {
           expectedSha256: previous.installedSha256,
         );
         if (!current.isValid) {
-          collisions.add(relative);
+          final target = await integrity.startOperation().verify(
+            file: destination,
+            expectedSize: asset.size,
+            expectedSha256: asset.sha256,
+          );
+          if (!target.isValid) collisions.add(relative);
         }
         continue;
       }
@@ -715,11 +773,13 @@ class InstallationService {
     }
     throw InstallationException(
       'A instalação foi bloqueada para proteger arquivos originais do jogo. '
-      'Os seguintes contêineres já pertenciam a esta instalação: '
+      'Os seguintes contêineres não têm propriedade comprovada pelo recibo '
+      'ou pelo pacote público atual: '
       '${collisions.join(', ')}. '
-      'Se a tradução já estiver instalada, use "Remover tradução" para '
-      'restaurar os originais. Caso contrário, exporte o diagnóstico e não '
-      'apague esses arquivos manualmente.',
+      'Se instalou uma versão de teste pelo Studio ou outro gerenciador, '
+      'desfaça primeiro essa instalação nele e tente novamente. '
+      'Arquivos desconhecidos não serão sobrescritos; exporte o diagnóstico '
+      'se não souber a origem e não apague esses arquivos manualmente.',
     );
   }
 
