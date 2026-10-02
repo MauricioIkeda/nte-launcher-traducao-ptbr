@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.11",
-  "publishedAt": "2026-09-17T05:47:30Z",
+  "version": "1.4.12",
+  "publishedAt": "2026-10-02T03:31:55Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.11/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19607150,
-    "sha256": "1b7d8725b10f6a87bcb659c479872d95f3262cd69d1039e3be1b005d4c3cc789"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.12/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19605551,
+    "sha256": "96f30c9aef771d5f64658967160f7ad8434ac30fc644b3749fcb9848185f1379"
   },
-  "releaseNotes": "Corrige a acentuação do título da janela do launcher e mantém a identificação correta da instância única.",
+  "releaseNotes": "Reparo mais seguro: conflitos são detectados antes da remoção, sem deixar a tradução incompleta. Reconciliação de arquivos públicos já atualizados e orientação para instalações de teste do Studio.",
   "mandatory": false
 }
