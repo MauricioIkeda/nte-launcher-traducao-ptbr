@@ -58,6 +58,8 @@ DESTINATIONS = {
 RELEASE_ASSETS = frozenset(
     (*DESTINATIONS, BUILD_MANIFEST_ASSET, MANIFEST_ASSET)
 )
+CONTENT_ASSET = "pakchunk999-Windows_999_P.pak"
+CONTENT_RELEASE_ASSETS = frozenset((CONTENT_ASSET, BUILD_MANIFEST_ASSET, MANIFEST_ASSET))
 
 ByteDownloader = Callable[[str, str | None], bytes]
 JsonDownloader = Callable[[str, str | None], Any]
@@ -388,7 +390,7 @@ def _release_assets(release: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
             raise ContractError(f"release: asset duplicado: {name}.")
         assets[folded] = asset
         exact_names.add(name)
-    if exact_names != RELEASE_ASSETS:
+    if exact_names not in (RELEASE_ASSETS, CONTENT_RELEASE_ASSETS):
         missing = sorted(RELEASE_ASSETS - exact_names)
         unexpected = sorted(exact_names - RELEASE_ASSETS)
         raise ContractError(
@@ -396,6 +398,19 @@ def _release_assets(release: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
             f"ausentes={missing}, inesperados={unexpected}."
         )
     return assets
+
+
+def validate_runtime_reference(value: Any, tag: str) -> dict[str, Any]:
+    data = _require_object(value, "runtimeReference")
+    if set(data) != {"version", "tag", "manifestSha256"} or type(data.get("version")) is not int or data["version"] != 1:
+        raise ContractError("runtimeReference: contrato versionado inválido.")
+    reference_tag = validate_tag(data.get("tag"))
+    # Tags encode UTC; dependency chains and a reference to this same publication
+    # are prohibited. The source digest is not part of chronological ordering.
+    if reference_tag[:25] >= tag[:25]:
+        raise ContractError("runtimeReference: referência deve ser anterior.")
+    return {"version": 1, "tag": reference_tag,
+            "manifestSha256": normalize_sha256(data.get("manifestSha256"), "runtimeReference.manifestSha256")}
 
 
 def validate_release(
@@ -536,6 +551,8 @@ def validate_public_manifest(
             raise ContractError("sourceHash: prefixo não corresponde à tag.")
         _validate_tag_timestamp(tag, published_at)
 
+    reference = validate_runtime_reference(data["runtimeReference"], tag) if "runtimeReference" in data else None
+
     raw_files = data.get("files")
     if not isinstance(raw_files, list) or not raw_files:
         raise ContractError("files: lista não vazia obrigatória.")
@@ -575,7 +592,8 @@ def validate_public_manifest(
         if size <= 0:
             raise ContractError(f"files[{name}]: tamanho inválido.")
         digest = normalize_sha256(entry.get("sha256"), f"files[{name}].sha256")
-        url = _validate_asset_download_url(entry.get("url"), tag, name)
+        file_tag = reference["tag"] if reference is not None and name != CONTENT_ASSET else tag
+        url = _validate_asset_download_url(entry.get("url"), file_tag, name)
         files.append(
             {
                 "name": name,
@@ -598,6 +616,8 @@ def validate_public_manifest(
         result["sourceHash"] = source_hash
     if localization is not None:
         result["localization"] = localization
+    if reference is not None:
+        result["runtimeReference"] = reference
     result["files"] = files
     return result
 
@@ -671,13 +691,39 @@ def reconstruct_manifest_from_release(
     *,
     token: str | None = None,
     downloader: ByteDownloader = request_asset_bytes,
+    json_downloader: JsonDownloader = request_json,
 ) -> dict[str, Any]:
     data, assets = validate_release(
         release, expected_tag=str(manifest["translationVersion"])
     )
     tag = str(data["tag_name"])
+    reference = manifest.get("runtimeReference")
+    inherited: dict[str, Any] = {}
+    exact_names = {a["name"] for a in assets.values()}
+    if reference is None:
+        if exact_names != RELEASE_ASSETS:
+            raise ContractError("release: três assets exigem runtimeReference explícita.")
+    else:
+        reference = validate_runtime_reference(reference, tag)
+        if exact_names != CONTENT_RELEASE_ASSETS:
+            raise ContractError("release de conteúdo: somente PAK e dois manifestos.")
+        prior_release = fetch_release_by_tag(AUTHORIZED_REPOSITORY, reference["tag"], token, downloader=json_downloader)
+        _, prior_assets = validate_release(prior_release, expected_tag=reference["tag"])
+        if {a["name"] for a in prior_assets.values()} != RELEASE_ASSETS:
+            raise ContractError("runtimeReference: somente release completa pode servir de referência.")
+        prior_raw = download_manifest_asset(prior_release, expected_sha256=reference["manifestSha256"], token=token, downloader=downloader)
+        prior = parse_public_manifest(prior_raw)
+        if "runtimeReference" in prior:
+            raise ContractError("runtimeReference: cadeias de dependências não são permitidas.")
+        compare_manifest_to_release(prior, prior_release, token=token, downloader=downloader, json_downloader=json_downloader)
+        if prior.get("localization") != manifest.get("localization") or prior.get("gameBuildId") != manifest.get("gameBuildId"):
+            raise ContractError("runtimeReference: host ou build mudou; compatibilidade precisa de nova referência completa.")
+        inherited = {f["name"]: f for f in prior["files"] if f["name"] != CONTENT_ASSET}
     reconstructed_files: list[dict[str, Any]] = []
     for name, destination in DESTINATIONS.items():
+        if name in inherited:
+            reconstructed_files.append(inherited[name])
+            continue
         asset = dict(assets[name.casefold()])
         asset["_validated_tag"] = tag
         size = _require_int(asset["size"], f"asset {name}.size")
@@ -705,6 +751,7 @@ def reconstruct_manifest_from_release(
         "publishedAt": manifest["publishedAt"],
         "gameBuildId": manifest.get("gameBuildId"),
         "sourceHash": manifest["sourceHash"],
+        **({"runtimeReference": reference} if reference is not None else {}),
         **(
             {"localization": manifest["localization"]}
             if "localization" in manifest
@@ -720,9 +767,10 @@ def compare_manifest_to_release(
     *,
     token: str | None = None,
     downloader: ByteDownloader = request_asset_bytes,
+    json_downloader: JsonDownloader = request_json,
 ) -> None:
     reconstructed = reconstruct_manifest_from_release(
-        release, manifest, token=token, downloader=downloader
+        release, manifest, token=token, downloader=downloader, json_downloader=json_downloader
     )
     actual = {entry["name"]: entry for entry in manifest["files"]}
     expected = {entry["name"]: entry for entry in reconstructed["files"]}
@@ -852,7 +900,7 @@ def candidate_from_dispatch(
     manifest = parse_public_manifest(raw)
     compare_manifest_to_payload(manifest, payload)
     compare_manifest_to_release(
-        manifest, release, token=token, downloader=byte_downloader
+        manifest, release, token=token, downloader=byte_downloader, json_downloader=json_downloader
     )
     return manifest
 
@@ -912,7 +960,7 @@ def candidate_from_recovery(
                     f"release {tag}: manifesto pertence a outra tag."
                 )
             compare_manifest_to_release(
-                manifest, release, token=token, downloader=byte_downloader
+                manifest, release, token=token, downloader=byte_downloader, json_downloader=json_downloader
             )
             candidates.append(manifest)
         except ContractError as error:
