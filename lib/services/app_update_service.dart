@@ -49,10 +49,7 @@ class AppUpdateService {
         (await PackageInfo.fromPlatform()).version;
   }
 
-  bool isUpdateAvailable(
-    AppUpdateManifest manifest,
-    String currentVersion,
-  ) {
+  bool isUpdateAvailable(AppUpdateManifest manifest, String currentVersion) {
     return manifest.isNewerThan(currentVersion) ||
         (_releaseCandidate && manifest.version == currentVersion);
   }

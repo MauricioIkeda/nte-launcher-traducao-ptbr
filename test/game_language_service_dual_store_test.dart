@@ -53,10 +53,7 @@ void main() {
     final steam = await _writeProfile(sandbox, 'Saved_GlobalSteam');
     final game = await _writeGameDirectory(sandbox, 'SteamGame', steam.root);
 
-    final result = await service.ensureCulture(
-      'fr',
-      gameDirectory: game.path,
-    );
+    final result = await service.ensureCulture('fr', gameDirectory: game.path);
 
     expect(result.changed, isTrue);
     expect(
@@ -78,10 +75,7 @@ void main() {
     final steam = await _writeProfile(sandbox, 'Saved_GlobalSteam');
     final game = await _writeGameDirectory(sandbox, 'EpicGame', epic.root);
 
-    final result = await service.ensureCulture(
-      'fr',
-      gameDirectory: game.path,
-    );
+    final result = await service.ensureCulture('fr', gameDirectory: game.path);
 
     expect(result.changed, isTrue);
     expect(

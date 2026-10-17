@@ -40,7 +40,7 @@
 - gera um único diagnóstico autocontido com sistema, Wine/Proton, plataforma,
   instalação, recibo, executáveis, histórico e trechos de logs protegidos;
 - verifica atualizações do próprio launcher;
-- oferece atualização automática opcional, desativada por padrão;
+- instala automaticamente novas versões obrigatórias do launcher ao abrir;
 - adapta o Play automático ao ambiente: UAC no Windows nativo e execução
   direta no mesmo prefixo em Wine/Proton, sempre com confirmação do auxiliar;
 - possui instalador, atalhos e desinstalador nativos para Windows.
@@ -98,7 +98,8 @@ anônimo da API do GitHub.
 
 O launcher tenta identificar a origem da instalação:
 
-- **Epic Games:** lê o manifesto local da Epic e inicia o jogo pelo protocolo
+- **Epic Games:** lê os manifestos locais antigos (`.item`) ou o registro novo
+  `com.epicgames.eglv2/installations.jsonl` e inicia o jogo pelo protocolo
   oficial da loja;
 - **Steam:** localiza o `appmanifest` e usa o protocolo oficial da Steam;
 - **Launcher oficial:** abre o executável oficial sem argumentos especiais. O
@@ -201,10 +202,14 @@ O arquivo
 [`launcher_manifest.json`](assets/manifest/launcher_manifest.json) informa a
 versão mais recente, o endereço do instalador, seu tamanho e SHA-256.
 
-Quando existe uma versão semântica mais recente, o launcher oferece a
-atualização na interface. Se a opção automática estiver habilitada, ele baixa,
-valida e inicia o instalador silencioso, encerrando o processo atual antes de
-substituir os arquivos.
+Todas as novas releases são geradas com `mandatory: true`, tanto por tag quanto
+pelo disparo manual. Ao abrir e encontrar uma versão semântica mais recente,
+o launcher baixa, valida tamanho/SHA-256 e inicia o instalador silencioso,
+encerrando o processo atual antes de substituir os arquivos. A preferência
+antiga de atualização opcional não desativa uma release obrigatória. Falhas de
+download mantêm o bloqueio das ações do jogo e permitem tentar a atualização
+novamente. Falha de rede na consulta conserva o comportamento offline existente;
+não há como reconhecer uma versão ainda não consultada.
 
 ### Compatibilidade com a versão 1.0.0
 

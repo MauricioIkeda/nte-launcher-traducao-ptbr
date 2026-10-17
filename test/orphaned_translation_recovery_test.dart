@@ -47,41 +47,44 @@ void main() {
 
   tearDown(() => sandbox.delete(recursive: true));
 
-  test('recovered receipt preserves and restores an existing original', () async {
-    final manifest = testManifest(
-      contents: const [
-        [1, 2, 3],
-      ],
-    );
-    final asset = manifest.files.single;
-    final destination = File(p.join(game.path, asset.relativeDestination));
-    await destination.parent.create(recursive: true);
-    await destination.writeAsBytes([1, 2, 3]);
+  test(
+    'recovered receipt preserves and restores an existing original',
+    () async {
+      final manifest = testManifest(
+        contents: const [
+          [1, 2, 3],
+        ],
+      );
+      final asset = manifest.files.single;
+      final destination = File(p.join(game.path, asset.relativeDestination));
+      await destination.parent.create(recursive: true);
+      await destination.writeAsBytes([1, 2, 3]);
 
-    final storage = await receipts.storageFor(game.path);
-    final original = await safePaths.resolveFile(
-      storage.originals.path,
-      asset.relativeDestination,
-    );
-    await original.parent.create(recursive: true);
-    await original.writeAsBytes([9, 9, 9]);
+      final storage = await receipts.storageFor(game.path);
+      final original = await safePaths.resolveFile(
+        storage.originals.path,
+        asset.relativeDestination,
+      );
+      await original.parent.create(recursive: true);
+      await original.writeAsBytes([9, 9, 9]);
 
-    final result = await verifier.verify(
-      loadedManifest: loaded(manifest),
-      gameDirectory: game.path,
-    );
-    final receipt = (await receipts.read(game.path)).receipt;
+      final result = await verifier.verify(
+        loadedManifest: loaded(manifest),
+        gameDirectory: game.path,
+      );
+      final receipt = (await receipts.read(game.path)).receipt;
 
-    expect(result.status, TranslationInstallationStatus.installedCurrent);
-    expect(receipt, isNotNull);
-    expect(receipt!.files.single.originalExisted, isTrue);
-    expect(receipt.files.single.originalSize, 3);
-    expect(receipt.files.single.originalSha256, hashOf([9, 9, 9]));
+      expect(result.status, TranslationInstallationStatus.installedCurrent);
+      expect(receipt, isNotNull);
+      expect(receipt!.files.single.originalExisted, isTrue);
+      expect(receipt.files.single.originalSize, 3);
+      expect(receipt.files.single.originalSha256, hashOf([9, 9, 9]));
 
-    final removal = await installer.uninstall(game.path);
+      final removal = await installer.uninstall(game.path);
 
-    expect(removal.complete, isTrue);
-    expect(await destination.readAsBytes(), [9, 9, 9]);
-    expect((await receipts.read(game.path)).receipt, isNull);
-  });
+      expect(removal.complete, isTrue);
+      expect(await destination.readAsBytes(), [9, 9, 9]);
+      expect((await receipts.read(game.path)).receipt, isNull);
+    },
+  );
 }

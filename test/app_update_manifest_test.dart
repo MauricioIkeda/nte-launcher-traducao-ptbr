@@ -39,9 +39,7 @@ void main() {
   });
 
   test('mandatory update ignores the automatic-update preference', () {
-    final mandatory = AppUpdateManifest.fromJson(
-      manifestJson(mandatory: true),
-    );
+    final mandatory = AppUpdateManifest.fromJson(manifestJson(mandatory: true));
     final optional = AppUpdateManifest.fromJson(manifestJson());
 
     expect(mandatory.shouldInstallAutomatically(false), isTrue);

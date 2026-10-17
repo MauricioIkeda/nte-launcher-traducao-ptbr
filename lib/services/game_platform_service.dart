@@ -49,12 +49,15 @@ class GamePlatformInfo {
 class GamePlatformService {
   GamePlatformService({
     Directory? epicManifestDirectory,
+    File? epicInstallationsFile,
     List<Directory>? steamRoots,
     ExternalUriLauncher? externalUriLauncher,
     OfficialLauncherAutomation? officialLauncherAutomation,
     OfficialLauncherOpener? officialLauncherOpener,
   }) : _epicManifestDirectory =
            epicManifestDirectory ?? _defaultEpicManifestDirectory(),
+       _epicInstallationsFile =
+           epicInstallationsFile ?? _defaultEpicInstallationsFile(),
        _steamRootsOverride = steamRoots,
        _externalUriLauncher = externalUriLauncher ?? _launchExternalUri,
        _officialLauncherAutomation =
@@ -64,13 +67,15 @@ class GamePlatformService {
            officialLauncherOpener ?? _openOfficialLauncher;
 
   final Directory _epicManifestDirectory;
+  final File _epicInstallationsFile;
   final List<Directory>? _steamRootsOverride;
   final ExternalUriLauncher _externalUriLauncher;
   final OfficialLauncherAutomation _officialLauncherAutomation;
   final OfficialLauncherOpener _officialLauncherOpener;
 
   Future<GamePlatformInfo> detect(String gameDirectory) async {
-    final epic = await _detectEpic(gameDirectory);
+    final epic =
+        await _detectEpicV2(gameDirectory) ?? await _detectEpic(gameDirectory);
     if (epic != null) {
       return epic;
     }
@@ -92,6 +97,7 @@ class GamePlatformService {
         'launcherFound': launcher != null,
         'launcherPath': launcher?.path,
         'epicManifestDirectory': _epicManifestDirectory.path,
+        'epicInstallationsFile': _epicInstallationsFile.path,
         'steamRootsOverride': _steamRootsOverride
             ?.map((directory) => directory.path)
             .toList(growable: false),
@@ -136,6 +142,105 @@ class GamePlatformService {
     }
   }
 
+  Future<GamePlatformInfo?> _detectEpicV2(String gameDirectory) async {
+    if (!await _epicInstallationsFile.exists()) {
+      return null;
+    }
+    try {
+      final lines = (await _epicInstallationsFile.readAsLines())
+          .where((line) => line.trim().isNotEmpty)
+          .toList(growable: false);
+      if (lines.isEmpty) {
+        return null;
+      }
+      final header = jsonDecode(lines.first);
+      if (header is! Map<String, dynamic> ||
+          header['version'] != 1 ||
+          header['entries'] != lines.length - 1) {
+        return null;
+      }
+
+      // This is a journal, not a list of independent installations. Only the
+      // last state for each installationId can describe its current directory
+      // and completion state. Never resurrect an earlier completed record.
+      final latest = <String, Map<String, dynamic>>{};
+      for (final line in lines.skip(1)) {
+        final record = jsonDecode(line);
+        if (record is! Map<String, dynamic>) {
+          return null;
+        }
+        final id = _stringValue(record, 'installationId');
+        if (id.isEmpty) {
+          return null;
+        }
+        latest[id] = record;
+      }
+      for (final record in latest.values) {
+        final directory = _stringValue(record, 'dir');
+        if (!_sameDirectory(directory, gameDirectory) ||
+            record['platform'] != 'Windows') {
+          continue;
+        }
+        // An update in progress can retain a previously installed version;
+        // a new, unfinished download alone is not an installed game.
+        if (record['complete'] != true &&
+            _stringValue(record, 'version').isEmpty) {
+          throw const GamePlatformException(
+            'A instalação da Epic ainda não foi concluída. '
+            'Conclua ou verifique o jogo na Epic Games.',
+          );
+        }
+        return _epicInfo(
+          namespace: _stringValue(record, 'namespace'),
+          catalogItemId: _stringValue(record, 'itemId'),
+          appName: _stringValue(record, 'artifactId'),
+          evidence: {
+            'method': 'epic_v2_installations_journal',
+            'manifestPath': _epicInstallationsFile.path,
+            'installationId': _stringValue(record, 'installationId'),
+            'installLocation': directory,
+            'complete': record['complete'],
+          },
+        );
+      }
+    } on FormatException {
+      // A torn write or unsupported document cannot prove a platform.
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+    return null;
+  }
+
+  static GamePlatformInfo _epicInfo({
+    required String namespace,
+    required String catalogItemId,
+    required String appName,
+    required Map<String, Object?> evidence,
+  }) {
+    if (!_safeEpicId(namespace) ||
+        !_safeEpicId(catalogItemId) ||
+        !_safeEpicId(appName)) {
+      throw const GamePlatformException(
+        'A instalação da Epic foi encontrada, mas seu manifesto está '
+        'incompleto.',
+      );
+    }
+    final product = Uri.encodeComponent('$namespace:$catalogItemId:$appName');
+    return GamePlatformInfo(
+      platform: GamePlatform.epicGames,
+      label: 'EPIC GAMES',
+      launchTarget:
+          'com.epicgames.launcher://apps/$product?action=launch&silent=true',
+      evidence: {
+        ...evidence,
+        'catalogNamespace': namespace,
+        'catalogItemId': catalogItemId,
+        'appName': appName,
+      },
+    );
+  }
+
   Future<GamePlatformInfo?> _detectEpic(String gameDirectory) async {
     if (!await _epicManifestDirectory.exists()) {
       return null;
@@ -146,8 +251,10 @@ class GamePlatformService {
         continue;
       }
       try {
-        final json =
-            jsonDecode(await entity.readAsString()) as Map<String, dynamic>;
+        final json = jsonDecode(await entity.readAsString());
+        if (json is! Map<String, dynamic>) {
+          continue;
+        }
         final installLocation = _stringValue(json, 'InstallLocation');
         if (!_sameDirectory(installLocation, gameDirectory)) {
           continue;
@@ -156,31 +263,14 @@ class GamePlatformService {
         final namespace = _stringValue(json, 'CatalogNamespace');
         final catalogItemId = _stringValue(json, 'CatalogItemId');
         final appName = _stringValue(json, 'AppName');
-        if (!_safeEpicId(namespace) ||
-            !_safeEpicId(catalogItemId) ||
-            !_safeEpicId(appName)) {
-          throw const GamePlatformException(
-            'A instalação da Epic foi encontrada, mas seu manifesto está '
-            'incompleto.',
-          );
-        }
-
-        final product = Uri.encodeComponent(
-          '$namespace:$catalogItemId:$appName',
-        );
-        return GamePlatformInfo(
-          platform: GamePlatform.epicGames,
-          label: 'EPIC GAMES',
-          launchTarget:
-              'com.epicgames.launcher://apps/$product'
-              '?action=launch&silent=true',
+        return _epicInfo(
+          namespace: namespace,
+          catalogItemId: catalogItemId,
+          appName: appName,
           evidence: {
             'method': 'epic_item_manifest',
             'manifestPath': entity.path,
             'installLocation': installLocation,
-            'catalogNamespace': namespace,
-            'catalogItemId': catalogItemId,
-            'appName': appName,
           },
         );
       } on GamePlatformException {
@@ -303,6 +393,13 @@ class GamePlatformService {
     return Directory(
       p.join(programData, 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests'),
     );
+  }
+
+  static File _defaultEpicInstallationsFile() {
+    final local =
+        Platform.environment['LOCALAPPDATA'] ??
+        p.join(Platform.environment['USERPROFILE'] ?? '', 'AppData', 'Local');
+    return File(p.join(local, 'com.epicgames.eglv2', 'installations.jsonl'));
   }
 
   static String _stringValue(Map<String, dynamic> json, String key) {

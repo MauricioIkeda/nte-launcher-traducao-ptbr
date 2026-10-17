@@ -31,12 +31,9 @@ abstract interface class LauncherSettings {
 }
 
 class SettingsService implements LauncherSettings {
-  SettingsService({
-    this.log,
-    File? preferencesFile,
-    DateTime Function()? now,
-  }) : _fixedPreferencesFile = preferencesFile,
-       _now = now ?? DateTime.now;
+  SettingsService({this.log, File? preferencesFile, DateTime Function()? now})
+    : _fixedPreferencesFile = preferencesFile,
+      _now = now ?? DateTime.now;
 
   static const _gameDirectoryKey = 'game_directory';
   static const _installedVersionKey = 'installed_version';

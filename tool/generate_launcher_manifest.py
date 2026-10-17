@@ -20,7 +20,6 @@ def build_manifest(
     repository: str,
     published_at: str,
     release_notes: str,
-    mandatory: bool,
 ) -> dict:
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"Invalid semantic version: {version!r}")
@@ -49,7 +48,7 @@ def build_manifest(
             "sha256": hashlib.sha256(contents).hexdigest(),
         },
         "releaseNotes": release_notes.strip(),
-        "mandatory": mandatory,
+        "mandatory": True,
     }
 
 
@@ -67,7 +66,6 @@ def main() -> int:
         default=datetime.now(timezone.utc).isoformat(),
     )
     parser.add_argument("--release-notes", default="")
-    parser.add_argument("--mandatory", action="store_true")
     args = parser.parse_args()
 
     manifest = build_manifest(
@@ -76,7 +74,6 @@ def main() -> int:
         repository=args.repository,
         published_at=args.published_at,
         release_notes=args.release_notes,
-        mandatory=args.mandatory,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

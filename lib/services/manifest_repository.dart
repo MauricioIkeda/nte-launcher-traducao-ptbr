@@ -157,9 +157,7 @@ class ManifestRepository {
   }
 
   Future<void> _writeCache(String source) {
-    final operation = _cacheWriteQueue.then(
-      (_) => _writeCacheNow(source),
-    );
+    final operation = _cacheWriteQueue.then((_) => _writeCacheNow(source));
     _cacheWriteQueue = operation.then<void>((_) {}, onError: (_, _) {});
     return operation;
   }

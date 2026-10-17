@@ -14,11 +14,6 @@ on:
         description: "Short release notes shown in the launcher"
         required: true
         type: string
-      mandatory:
-        description: "Mark this update as mandatory"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -155,22 +150,15 @@ jobs:
         shell: pwsh
         env:
           RELEASE_NOTES: ${{ steps.version.outputs.notes }}
-          MANDATORY_UPDATE: ${{ inputs.mandatory }}
         run: |
           $publishedAt = (Get-Date).ToUniversalTime().ToString("o")
-          $mandatory = if ($env:MANDATORY_UPDATE -eq "true") {
-            "--mandatory"
-          } else {
-            $null
-          }
           python tool\generate_launcher_manifest.py `
             --version "${{ steps.version.outputs.version }}" `
             --installer "build\installer\NTE-Launcher-Traducao-PTBR-Setup.exe" `
             --repository "${{ github.repository }}" `
             --output "assets\manifest\launcher_manifest.json" `
             --published-at $publishedAt `
-            --release-notes $env:RELEASE_NOTES `
-            $mandatory
+            --release-notes $env:RELEASE_NOTES
 
       - name: Publish GitHub Release
         env:
