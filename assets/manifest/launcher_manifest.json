@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "1.4.12",
-  "publishedAt": "2026-10-02T03:31:55Z",
+  "version": "1.4.13",
+  "publishedAt": "2026-10-17T06:30:11Z",
   "installer": {
-    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.12/NTE-Launcher-Traducao-PTBR-Setup.exe",
-    "size": 19605551,
-    "sha256": "96f30c9aef771d5f64658967160f7ad8434ac30fc644b3749fcb9848185f1379"
+    "url": "https://github.com/MauricioIkeda/nte-launcher-traducao-ptbr/releases/download/v1.4.13/NTE-Launcher-Traducao-PTBR-Setup.exe",
+    "size": 19608741,
+    "sha256": "c604f9735680b3a36594836b51c7bc97e4aed4deaf4c1bf62ae402765322b52f"
   },
-  "releaseNotes": "Reparo mais seguro: conflitos são detectados antes da remoção, sem deixar a tradução incompleta. Reconciliação de arquivos públicos já atualizados e orientação para instalações de teste do Studio.",
-  "mandatory": false
+  "releaseNotes": "Corrige a identificação de instalações da Epic atual. Novas versões do launcher atualizam automaticamente ao abrir, pelo fluxo obrigatório com verificação de tamanho e SHA-256.",
+  "mandatory": true
 }
