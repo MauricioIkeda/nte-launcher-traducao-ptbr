@@ -1437,7 +1437,7 @@ class _SettingsDialog extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'ATUALIZAÇÕES AUTOMÁTICAS',
+                                'ATUALIZAÇÕES OBRIGATÓRIAS',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
@@ -1446,17 +1446,14 @@ class _SettingsDialog extends StatelessWidget {
                               ),
                               SizedBox(height: 3),
                               Text(
-                                'Baixar e instalar ao abrir quando houver '
-                                'uma versão nova.',
+                                'Novas versões do launcher são baixadas e '
+                                'instaladas ao abrir, após verificação.',
                                 style: TextStyle(color: _muted, fontSize: 9),
                               ),
                             ],
                           ),
                         ),
-                        Switch(
-                          value: controller.automaticLauncherUpdates,
-                          onChanged: controller.setAutomaticLauncherUpdates,
-                        ),
+                        const Icon(Icons.lock_outline_rounded, color: _muted),
                       ],
                     ),
                   ),

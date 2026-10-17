@@ -49,6 +49,40 @@ void main() {
 
   tearDown(() => sandbox.delete(recursive: true));
 
+  test(
+    'mandatory update starts before game detection with preference off; failure blocks actions',
+    () async {
+      final updates = _FailingMandatoryUpdateService(paths, log);
+      final platforms = _FakeGamePlatformService();
+      final controller = harness.controller(
+        manifest: testManifest(contents: contents),
+        contents: contents,
+        settings: _FakeSettings(game.path),
+        appUpdates: updates,
+        gamePlatforms: platforms,
+        autoInstall: true,
+      );
+      await controller.initialize();
+      expect(controller.automaticLauncherUpdates, isFalse);
+      expect(updates.downloads, 1);
+      expect(controller.mandatoryLauncherUpdatePending, isTrue);
+      expect(controller.updatingLauncher, isFalse);
+      expect(controller.errorMessage, contains('atualizar o launcher'));
+      expect(controller.gamePlatform, isNull);
+      expect(controller.loadedManifest, isNull);
+      expect(controller.canInstall, isFalse);
+      expect(controller.canRemove, isFalse);
+      expect(controller.canChangeGameDirectory, isFalse);
+      expect(platforms.launchCount, 0);
+      expect(
+        await harness.receipts.read(game.path).then((r) => r.receipt),
+        isNull,
+      );
+      await controller.installLauncherUpdate();
+      expect(updates.downloads, 2);
+    },
+  );
+
   test('persisted version alone is never proof of installation', () async {
     final settings = _FakeSettings(game.path)
       ..installedVersion = 'false-version';
@@ -606,6 +640,7 @@ class _Harness {
     DownloadService? downloads,
     ElevationService? elevation,
     GamePlatformService? gamePlatforms,
+    AppUpdateService? appUpdates,
     PreInstallationService? preInstallation,
     bool autoInstall = false,
   }) {
@@ -620,7 +655,7 @@ class _Harness {
     return LauncherController(
       paths: paths,
       log: log,
-      appUpdates: _FakeAppUpdateService(paths, log),
+      appUpdates: appUpdates ?? _FakeAppUpdateService(paths, log),
       manifests: _FakeManifestRepository(paths, log, loaded(manifest)),
       downloads: downloads ?? _FakeDownloadService(paths, log, contents),
       elevation: elevation ?? _FakeElevationService(log),
@@ -808,6 +843,34 @@ class _FakeAppUpdateService extends AppUpdateService {
   Future<String> currentVersion() async => '1.0.4';
   @override
   Future<AppUpdateManifest?> check() async => null;
+}
+
+class _FailingMandatoryUpdateService extends _FakeAppUpdateService {
+  _FailingMandatoryUpdateService(super.paths, super.log);
+  int downloads = 0;
+
+  @override
+  Future<AppUpdateManifest?> check() async => AppUpdateManifest(
+    schemaVersion: 1,
+    version: '9.0.0',
+    publishedAt: DateTime.utc(2026, 10, 17),
+    installerUrl: Uri.parse(
+      'https://github.com/example/launcher/releases/download/v9.0.0/Setup.exe',
+    ),
+    installerSize: 3,
+    installerSha256: 'a' * 64,
+    releaseNotes: 'Synthetic mandatory release.',
+    mandatory: true,
+  );
+
+  @override
+  Future<File> downloadInstaller(
+    AppUpdateManifest manifest, {
+    required UpdateProgress onProgress,
+  }) async {
+    downloads++;
+    throw const AppUpdateException('Synthetic download failure.');
+  }
 }
 
 class _DelayedVerifier extends TranslationVerificationService {

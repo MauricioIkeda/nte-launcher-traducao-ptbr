@@ -187,6 +187,22 @@ class LauncherController extends ChangeNotifier {
       // Force every existing installation away from the unsafe cold
       // /autoplay path, including users who previously enabled the option.
       await settings.setOfficialAutoplay(false);
+      // Update the launcher before inspecting the game. A detection or
+      // translation error must not prevent a mandatory launcher repair.
+      await diagnostics.record(
+        'launcher_initialize_stage',
+        details: {'stage': 'launcher_update_check'},
+      );
+      await checkLauncherUpdates();
+      if (!_isCurrent(operation)) {
+        return;
+      }
+      final launcherUpdate = availableAppUpdate;
+      if (launcherUpdate != null &&
+          launcherUpdate.shouldInstallAutomatically(automaticLauncherUpdates)) {
+        await installLauncherUpdate();
+        return;
+      }
       await diagnostics.record(
         'launcher_initialize_stage',
         details: {'stage': 'game_directory_resolution'},
@@ -271,20 +287,6 @@ class LauncherController extends ChangeNotifier {
         return;
       }
 
-      await diagnostics.record(
-        'launcher_initialize_stage',
-        details: {'stage': 'launcher_update_check'},
-      );
-      await checkLauncherUpdates();
-      if (!_isCurrent(operation)) {
-        return;
-      }
-      final launcherUpdate = availableAppUpdate;
-      if (launcherUpdate != null &&
-          launcherUpdate.shouldInstallAutomatically(automaticLauncherUpdates)) {
-        await installLauncherUpdate();
-        return;
-      }
       await diagnostics.record(
         'launcher_initialize_stage',
         details: {'stage': 'finalizing'},
