@@ -104,17 +104,13 @@ class BootstrapDiagnostics {
         try {
           result.add(_sanitize(jsonDecode(line)));
         } catch (_) {
-          result.add({
-            'malformed': LauncherLog.redactSensitiveValues(line),
-          });
+          result.add({'malformed': LauncherLog.redactSensitiveValues(line)});
         }
       }
       return result;
     } catch (error) {
       return [
-        {
-          'readError': LauncherLog.redactSensitiveValues(error.toString()),
-        },
+        {'readError': LauncherLog.redactSensitiveValues(error.toString())},
       ];
     }
   }

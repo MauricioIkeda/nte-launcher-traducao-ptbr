@@ -135,10 +135,7 @@ class LauncherLog {
       (match) => '${match.group(1)} [REDACTED_PLAYER_INFO]',
     );
     result = result.replaceAllMapped(
-      RegExp(
-        r'([A-Za-z]:[\\/]+Users[\\/]+)[^\\/\r\n]+',
-        caseSensitive: false,
-      ),
+      RegExp(r'([A-Za-z]:[\\/]+Users[\\/]+)[^\\/\r\n]+', caseSensitive: false),
       (match) => '${match.group(1)}[REDACTED_USER]',
     );
     result = result.replaceAllMapped(

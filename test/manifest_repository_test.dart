@@ -95,12 +95,14 @@ void main() {
 
     final results = await Future.wait([repository.load(), repository.load()]);
 
-    expect(results.map((result) => result?.source.name), everyElement('remote'));
+    expect(
+      results.map((result) => result?.source.name),
+      everyElement('remote'),
+    );
     expect(await paths.cachedManifest.readAsString(), source);
-    final temporaryFiles = paths.cache
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.contains('.tmp.'));
+    final temporaryFiles = paths.cache.listSync().whereType<File>().where(
+      (file) => file.path.contains('.tmp.'),
+    );
     expect(temporaryFiles, isEmpty);
   });
 
