@@ -1,49 +1,49 @@
 {
   "schemaVersion": 1,
-  "translationVersion": "nte-auto-20261021-161731-a8ce7b6878d2",
-  "publishedAt": "2026-10-21T16:17:31Z",
+  "translationVersion": "nte-auto-20261105-045656-b4eb00466d87",
+  "publishedAt": "2026-11-05T04:56:56Z",
   "gameBuildId": null,
-  "sourceHash": "a8ce7b6878d2cef8c54842e00dbd124de4ecb167045ac8fecfa4fbac646de82f",
+  "sourceHash": "b4eb00466d8773155361cf7607421fdf7f45459c8de2c3f96b7ece3b61eea28e",
   "localization": {
     "sourceCulture": "en",
     "installationCulture": "es",
     "targetLanguage": "pt-BR",
     "hostCompatible": true,
-    "hostLocresSha256": "a2368b95d7e4533d06ebe613bc8918860b59899ee2f74a643e7ca04d1b3b180c"
+    "hostLocresSha256": "e0cd88ceb38e7a2e56263619f3d686363170259e22c87cfb30d9060317909cad"
   },
   "files": [
     {
       "name": "UniversalSigBypasser.asi",
       "relativeDestination": "Client/WindowsNoEditor/HT/Binaries/Win64/UniversalSigBypasser.asi",
-      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261021-161731-a8ce7b6878d2/UniversalSigBypasser.asi",
+      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261105-045656-b4eb00466d87/UniversalSigBypasser.asi",
       "size": 42496,
       "sha256": "1374ac9e894e45e802f983958599b7c396b11d2cf8fac9b4556bac73d453798b"
     },
     {
       "name": "version.dll",
       "relativeDestination": "Client/WindowsNoEditor/HT/Binaries/Win64/version.dll",
-      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261021-161731-a8ce7b6878d2/version.dll",
+      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261105-045656-b4eb00466d87/version.dll",
       "size": 3615648,
       "sha256": "22fda9c71eaae02460f311bf3441638340ab591586d78f1de213c4819dcb883c"
     },
     {
       "name": "pakchunk999-Windows_999_P.pak",
       "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.pak",
-      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261021-161731-a8ce7b6878d2/pakchunk999-Windows_999_P.pak",
-      "size": 20813380,
-      "sha256": "ccbfe0a1ff470c82d395f5317cdf3f32810143457a9544c9ca5d4d6073f33cce"
+      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261105-045656-b4eb00466d87/pakchunk999-Windows_999_P.pak",
+      "size": 20809759,
+      "sha256": "d9d5058a7588d14efcfab74e70bd5dc52cc2369eeda7a675cbbd107760a5a60d"
     },
     {
       "name": "pakchunk999-Windows_999_P.utoc",
       "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.utoc",
-      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261021-161731-a8ce7b6878d2/pakchunk999-Windows_999_P.utoc",
+      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261105-045656-b4eb00466d87/pakchunk999-Windows_999_P.utoc",
       "size": 202,
       "sha256": "b4953c4803f3649762951a9fd6e687fa2cff6e9974b18852532afa1af1facbe6"
     },
     {
       "name": "pakchunk999-Windows_999_P.ucas",
       "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.ucas",
-      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261021-161731-a8ce7b6878d2/pakchunk999-Windows_999_P.ucas",
+      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261105-045656-b4eb00466d87/pakchunk999-Windows_999_P.ucas",
       "size": 64,
       "sha256": "df57115aad16e8091095a332298086a62acfd2f5bc1e82fdd59e8cdcb667ee4c"
     }
