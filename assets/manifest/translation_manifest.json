@@ -1,15 +1,20 @@
 {
   "schemaVersion": 1,
-  "translationVersion": "nte-auto-20261112-035105-91ad3fd26fec",
-  "publishedAt": "2026-11-12T03:51:05Z",
+  "translationVersion": "nte-auto-20261112-055929-cf59dbf7ef5a",
+  "publishedAt": "2026-11-12T05:59:29Z",
   "gameBuildId": null,
-  "sourceHash": "91ad3fd26fec7b1b2e9bcc5f9c1819ee525231eb4e11a497825912975b6b12eb",
+  "sourceHash": "cf59dbf7ef5ad85cc9a5b8015cd9cfd69b3be6240921fcd436e91bea0fd52730",
   "localization": {
     "sourceCulture": "en",
     "installationCulture": "es",
     "targetLanguage": "pt-BR",
     "hostCompatible": true,
     "hostLocresSha256": "046227dd5ca2996f80f12b232a0a749c0eba3001f1a3846d7f08b073a5b9fa0d"
+  },
+  "runtimeReference": {
+    "version": 1,
+    "tag": "nte-auto-20261112-035105-91ad3fd26fec",
+    "manifestSha256": "61e079286c55bc71d4ce06392e448ace80707dd24cdb92dc47255d875c53ec1a"
   },
   "files": [
     {
@@ -29,9 +34,9 @@
     {
       "name": "pakchunk999-Windows_999_P.pak",
       "relativeDestination": "Client/WindowsNoEditor/HT/Content/Paks/pakchunk999-Windows_999_P.pak",
-      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261112-035105-91ad3fd26fec/pakchunk999-Windows_999_P.pak",
-      "size": 22356424,
-      "sha256": "7ceac9cb4b93cab3d7d8bac314f9a1d009e61ff3a9859847d91d68a9c9f8c031"
+      "url": "https://github.com/MauricioIkeda/nte-ptbr-releases/releases/download/nte-auto-20261112-055929-cf59dbf7ef5a/pakchunk999-Windows_999_P.pak",
+      "size": 22356234,
+      "sha256": "f5f7c09451a6db81a71285decd555487287452903b606c60896086dfe3a86816"
     },
     {
       "name": "pakchunk999-Windows_999_P.utoc",
